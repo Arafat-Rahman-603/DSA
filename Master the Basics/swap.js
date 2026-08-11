@@ -38,3 +38,18 @@ function swappingwithoperator() {
 
 swappingwithoperator();
 
+
+// swap with destructuring assignment
+
+function swappingwithdestructuring() {
+    let a = 10;
+    let b = 20;
+    console.log(`initial values ${a}, ${b}`);
+
+    [a, b] = [b, a];
+
+    console.log(`after swap with destructuring ${a}, ${b}`);
+
+}
+
+swappingwithdestructuring();
