@@ -53,3 +53,21 @@ function swappingwithdestructuring() {
 }
 
 swappingwithdestructuring();
+
+
+// swap with operators * , /
+function swappingwithoperatoroverloading() {
+
+    let a = 10;
+    let b = 20;
+    console.log(`initial values ${a}, ${b}`);
+
+    a = a * b;
+    b = a / b;
+    a = a / b;
+
+    console.log(`after swap with operators ${a}, ${b}`);
+
+}
+
+swappingwithoperatoroverloading();
