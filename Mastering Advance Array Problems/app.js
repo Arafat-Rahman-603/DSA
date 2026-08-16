@@ -141,3 +141,30 @@ function removeDuplicates(arr) {
 }
 
 removeDuplicates([1, 2, 2, 3, 4, 4])
+
+
+function mergeSortedArray(arr1, arr2) {
+    let marge = new Array(arr1.length + arr2.length);
+    let i = 0;
+    let j = 0;
+    let k = 0;
+    while (i < arr1.length && j < arr2.length) {
+        if (arr1[i] < arr2[j]) {
+            marge[k++] = arr1[i++]
+        } else {
+            marge[k++] = arr2[j++]
+        }
+    }
+    while (i < arr1.length) {
+        marge[k++] = arr1[i++]
+    }
+    while (j < arr2.length) {
+        marge[k++] = arr2[j++]
+    }
+
+    console.log(marge)
+}
+
+mergeSortedArray([2, 5, 6], [1, 3, 4, 7]);
+
+
