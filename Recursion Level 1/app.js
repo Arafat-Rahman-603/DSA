@@ -22,3 +22,28 @@ sumf(3)
     }
 
     console.log(fact(10))
+
+
+
+    let a = 0;
+    let b = 1;
+    let sum_f = 1;
+function fSum(n){
+    let c = a+b;
+    a=b;
+    b=c;
+    sum_f += c;
+
+    if(n==0)return;
+    console.log(sum_f)
+    fSum(n-1)
+}
+
+fSum(5)
+
+function fibo(n){
+    if( n==1) return 1;
+    return fibo(n-1) + fibo(n-2);
+}
+
+console.log(fibo(5))
