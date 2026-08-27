@@ -1,0 +1,1852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>K-Trace SRE Observability & Telemetry Engine</title>
+  <meta name="description" content="High-density eBPF telemetry and real-time distributed trace analysis for site reliability engineering teams.">
+  
+  <!-- Typography Tokens -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* =========================================================================
+       DESIGN SYSTEM: INDUSTRIAL TECHNICAL MONO
+       Strict Tokens:
+       - Surfaces: #0f172a (dominant 60%), lightness stepped #141f36, #1a2742, #213050, #28395e
+       - Content: Off-White #f4f4f5 (30%), Subdued #d4d4d8, Muted #94a3b8
+       - Accent: Amber #f59e0b (10% - max active hues restricted to Navy/Slate, Off-White, Amber)
+       - Borderless containers with 3-5% lightness shift
+       - Space Grotesk (Headlines, tracking -0.02em)
+       - JetBrains Mono (Body >=16px, line-height 1.5, tabular metrics)
+       - Explicit states: hover, focus-visible, active, disabled
+       - Easing: transition: all 150ms cubic-bezier(0, 0, 0.2, 1)
+       ========================================================================= */
+
+    :root {
+      /* Surface Lightness Steps (3-5% deltas, strictly borderless) */
+      --surface-base: #0f172a;       /* 60% Dominant */
+      --surface-subtle: #141f36;     /* +3.5% lightness */
+      --surface-raised: #1a2742;     /* +4.0% lightness */
+      --surface-overlay: #213050;    /* +4.5% lightness */
+      --surface-highlight: #28395e;  /* +4.5% lightness */
+      --surface-hover: #31446d;
+
+      /* Content Tokens (Off-White 30%, APCA Lc >= 75) */
+      --text-primary: #f4f4f5;      /* Off-White */
+      --text-secondary: #d4d4d8;    /* High contrast neutral */
+      --text-muted: #94a3b8;        /* Supporting technical metadata */
+      --text-dim: #64748b;          /* Code gutter / inert elements */
+
+      /* Single Accent Hue (10% Total Distribution) */
+      --accent-primary: #f59e0b;    /* Industrial Amber */
+      --accent-muted: rgba(245, 158, 11, 0.16);
+      --accent-subtle: rgba(245, 158, 11, 0.08);
+      --accent-hover: #fbbf24;
+      --accent-active: #d97706;
+
+      /* Typography */
+      --font-display: 'Space Grotesk', -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      
+      /* Layout & Spacing */
+      --radius-sm: 2px;
+      --radius-md: 4px;
+      --radius-lg: 6px;
+      --transition-standard: all 150ms cubic-bezier(0, 0, 0.2, 1);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--surface-base);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 16px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    /* Accessibility Focus Ring */
+    :focus-visible {
+      outline: 2px solid var(--accent-primary);
+      outline-offset: 2px;
+    }
+
+    /* Typography Utilities */
+    h1, h2, h3, h4, .headline {
+      font-family: var(--font-display);
+      letter-spacing: -0.02em;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.15;
+    }
+
+    .mono-num {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Top Global Telemetry Status Bar */
+    .telemetry-bar {
+      background-color: var(--surface-subtle);
+      padding: 8px 24px;
+      font-size: 13px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      user-select: none;
+    }
+
+    .telemetry-bar-left, .telemetry-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      background-color: var(--accent-primary);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-primary);
+      animation: pulse-dot 2.5s infinite ease-in-out;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.85); }
+    }
+
+    .stat-badge {
+      color: var(--text-muted);
+      display: inline-flex;
+      gap: 6px;
+    }
+
+    .stat-badge strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* Container Architecture */
+    .container {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* Header Nav */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 0 32px 0;
+    }
+
+    .brand-id {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text-primary);
+    }
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      background-color: var(--surface-raised);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-weight: 700;
+      color: var(--accent-primary);
+      font-size: 16px;
+      border-radius: var(--radius-sm);
+    }
+
+    .brand-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-version {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent-primary);
+      background-color: var(--accent-muted);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+    }
+
+    .header-nav-items {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      list-style: none;
+    }
+
+    .nav-link {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      transition: var(--transition-standard);
+      background: transparent;
+    }
+
+    .nav-link:hover {
+      background-color: var(--surface-subtle);
+      color: var(--text-primary);
+    }
+
+    .btn-utility {
+      background-color: var(--surface-raised);
+      color: var(--text-primary);
+      border: none;
+      padding: 8px 14px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: var(--transition-standard);
+    }
+
+    .btn-utility:hover {
+      background-color: var(--surface-overlay);
+      color: var(--accent-primary);
+    }
+
+    .btn-utility:active {
+      background-color: var(--surface-highlight);
+    }
+
+    /* Asymmetric 2-Column Hero */
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 1.35fr;
+      gap: 28px;
+      align-items: stretch;
+      margin-bottom: 32px;
+    }
+
+    /* Left Column: Direct Value Proposition & Action */
+    .hero-left-pane {
+      background-color: var(--surface-subtle);
+      padding: 36px 32px;
+      border-radius: var(--radius-md);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .system-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent-primary);
+      margin-bottom: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hero-heading {
+      font-size: 38px;
+      line-height: 1.12;
+      margin-bottom: 16px;
+      color: var(--text-primary);
+    }
+
+    .hero-heading span.accent-text {
+      color: var(--accent-primary);
+    }
+
+    .hero-description {
+      font-size: 16px;
+      line-height: 1.5;
+      color: var(--text-secondary);
+      margin-bottom: 28px;
+      max-width: 580px;
+    }
+
+    /* Primary SLO Metrics Strip */
+    .slo-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .slo-card {
+      background-color: var(--surface-raised);
+      padding: 14px 16px;
+      border-radius: var(--radius-sm);
+    }
+
+    .slo-card-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+
+    .slo-card-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      font-family: var(--font-display);
+    }
+
+    .slo-card-status {
+      font-size: 12px;
+      color: var(--accent-primary);
+      margin-top: 2px;
+      font-weight: 500;
+    }
+
+    /* Action Control Row */
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .btn-primary {
+      background-color: var(--accent-primary);
+      color: #0b1120;
+      border: none;
+      padding: 13px 24px;
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 700;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      transition: var(--transition-standard);
+      text-decoration: none;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:active {
+      background-color: var(--accent-active);
+      transform: translateY(0);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .btn-secondary {
+      background-color: var(--surface-raised);
+      color: var(--text-primary);
+      border: none;
+      padding: 13px 20px;
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: var(--transition-standard);
+    }
+
+    .btn-secondary:hover {
+      background-color: var(--surface-overlay);
+      color: var(--accent-primary);
+    }
+
+    .btn-secondary:active {
+      background-color: var(--surface-highlight);
+    }
+
+    .btn-secondary:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Right Column: Live Interactive Telemetry Terminal */
+    .terminal-pane {
+      background-color: var(--surface-subtle);
+      border-radius: var(--radius-md);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 480px;
+    }
+
+    .terminal-header {
+      background-color: var(--surface-raised);
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .terminal-tab-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    .terminal-tab {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: var(--transition-standard);
+    }
+
+    .terminal-tab:hover {
+      color: var(--text-primary);
+      background-color: var(--surface-overlay);
+    }
+
+    .terminal-tab.active {
+      background-color: var(--surface-overlay);
+      color: var(--accent-primary);
+    }
+
+    .terminal-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .terminal-stream-btn {
+      background-color: var(--surface-overlay);
+      color: var(--text-secondary);
+      border: none;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: var(--transition-standard);
+    }
+
+    .terminal-stream-btn:hover {
+      background-color: var(--surface-highlight);
+      color: var(--text-primary);
+    }
+
+    .terminal-stream-btn.is-streaming .stream-beacon {
+      background-color: var(--accent-primary);
+      box-shadow: 0 0 6px var(--accent-primary);
+    }
+
+    .stream-beacon {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: var(--text-dim);
+    }
+
+    .terminal-body {
+      padding: 16px 20px;
+      flex-grow: 1;
+      font-size: 13.5px;
+      line-height: 1.65;
+      overflow-y: auto;
+      max-height: 420px;
+      background-color: var(--surface-subtle);
+      scrollbar-width: thin;
+      scrollbar-color: var(--surface-highlight) var(--surface-subtle);
+    }
+
+    .terminal-line {
+      display: flex;
+      gap: 12px;
+      padding: 2px 0;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .terminal-line.highlight {
+      background-color: var(--accent-subtle);
+    }
+
+    .t-time {
+      color: var(--text-dim);
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .t-level-warn {
+      color: var(--accent-primary);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .t-level-info {
+      color: var(--text-secondary);
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .t-probe {
+      color: #cbd5e1;
+      flex-shrink: 0;
+    }
+
+    .t-msg {
+      color: var(--text-primary);
+    }
+
+    .t-param {
+      color: var(--accent-primary);
+    }
+
+    .terminal-input-row {
+      background-color: var(--surface-raised);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .terminal-prompt {
+      color: var(--accent-primary);
+      font-weight: 700;
+      font-size: 14px;
+      user-select: none;
+    }
+
+    .terminal-input {
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 13.5px;
+      flex-grow: 1;
+    }
+
+    .terminal-input:focus {
+      outline: none;
+    }
+
+    .terminal-run-btn {
+      background-color: var(--surface-overlay);
+      color: var(--text-primary);
+      border: none;
+      padding: 4px 10px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: var(--transition-standard);
+    }
+
+    .terminal-run-btn:hover {
+      background-color: var(--accent-primary);
+      color: #0f172a;
+    }
+
+    /* =========================================================================
+       HIGH-DENSITY SRE TELEMETRY GRID (4-PANE BORDERLESS SYSTEM)
+       ========================================================================= */
+    .section-header {
+      margin-top: 16px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    .section-title {
+      font-size: 22px;
+    }
+
+    .section-meta {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .analytics-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+
+    .grid-col-8 {
+      grid-column: span 8;
+    }
+
+    .grid-col-4 {
+      grid-column: span 4;
+    }
+
+    .grid-col-6 {
+      grid-column: span 6;
+    }
+
+    .grid-col-12 {
+      grid-column: span 12;
+    }
+
+    .density-card {
+      background-color: var(--surface-subtle);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-subtext {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .card-actions-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .density-chip {
+      background-color: var(--surface-raised);
+      color: var(--text-secondary);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+    }
+
+    .density-chip.active {
+      background-color: var(--accent-muted);
+      color: var(--accent-primary);
+    }
+
+    /* Latency Quantile Chart Component */
+    .chart-container {
+      position: relative;
+      height: 220px;
+      width: 100%;
+      margin: 12px 0 16px 0;
+      background-color: var(--surface-raised);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+
+    canvas#latencyCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .chart-legend {
+      display: flex;
+      gap: 20px;
+      font-size: 12px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-secondary);
+    }
+
+    .legend-indicator {
+      width: 10px;
+      height: 3px;
+      border-radius: 1px;
+    }
+
+    /* Multi-Burn Rate SLO Matrix Table */
+    .dense-table-wrapper {
+      overflow-x: auto;
+      background-color: var(--surface-raised);
+      border-radius: var(--radius-sm);
+    }
+
+    .dense-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    .dense-table th {
+      background-color: var(--surface-overlay);
+      color: var(--text-muted);
+      padding: 10px 14px;
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      user-select: none;
+    }
+
+    .dense-table td {
+      padding: 11px 14px;
+      color: var(--text-primary);
+      border-bottom: 1px solid var(--surface-overlay);
+    }
+
+    .dense-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .dense-table tr:hover td {
+      background-color: var(--surface-highlight);
+    }
+
+    .burn-multiplier {
+      color: var(--accent-primary);
+      font-weight: 700;
+    }
+
+    .badge-status {
+      display: inline-block;
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      background-color: var(--surface-overlay);
+      color: var(--text-secondary);
+    }
+
+    .badge-status.warning {
+      background-color: var(--accent-muted);
+      color: var(--accent-primary);
+    }
+
+    /* eBPF Probe Kernel Hook Matrix */
+    .hook-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .hook-card {
+      background-color: var(--surface-raised);
+      padding: 14px;
+      border-radius: var(--radius-sm);
+      transition: var(--transition-standard);
+      cursor: pointer;
+    }
+
+    .hook-card:hover {
+      background-color: var(--surface-overlay);
+    }
+
+    .hook-card.active {
+      background-color: var(--surface-overlay);
+      outline: 1px solid var(--accent-primary);
+    }
+
+    .hook-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .hook-name {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .hook-overhead {
+      font-size: 11px;
+      color: var(--accent-primary);
+      background-color: var(--accent-muted);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+    }
+
+    .hook-desc {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .hook-stats {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--surface-overlay);
+      padding-top: 6px;
+    }
+
+    /* Mesh Ingress Topology Inspector */
+    .topology-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .topo-item {
+      background-color: var(--surface-raised);
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .topo-node {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .topo-signal {
+      width: 8px;
+      height: 8px;
+      background-color: var(--accent-primary);
+      border-radius: 50%;
+    }
+
+    .topo-name {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .topo-region {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .topo-metrics {
+      display: flex;
+      gap: 18px;
+      font-size: 12.5px;
+    }
+
+    .topo-metric-val {
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    /* =========================================================================
+       INTERACTIVE SRE SANDBOX MODAL / DRAWER
+       ========================================================================= */
+    .sandbox-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 150ms ease-out;
+    }
+
+    .sandbox-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .sandbox-modal {
+      width: 90%;
+      max-width: 960px;
+      background-color: var(--surface-subtle);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      max-height: 88vh;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      transform: translateY(10px);
+      transition: transform 150ms ease-out;
+    }
+
+    .sandbox-backdrop.open .sandbox-modal {
+      transform: translateY(0);
+    }
+
+    .sandbox-header {
+      background-color: var(--surface-raised);
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .sandbox-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .sandbox-badge {
+      background-color: var(--accent-primary);
+      color: #0f172a;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+    }
+
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 20px;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      transition: var(--transition-standard);
+    }
+
+    .close-btn:hover {
+      background-color: var(--surface-overlay);
+      color: var(--text-primary);
+    }
+
+    .sandbox-body {
+      padding: 24px;
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: 1fr 1.2fr;
+      gap: 20px;
+    }
+
+    .sandbox-config-pane {
+      background-color: var(--surface-raised);
+      padding: 18px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .config-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .chaos-btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .btn-chaos {
+      background-color: var(--surface-overlay);
+      color: var(--text-secondary);
+      border: none;
+      padding: 10px 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      text-align: left;
+      transition: var(--transition-standard);
+    }
+
+    .btn-chaos:hover {
+      background-color: var(--surface-highlight);
+      color: var(--text-primary);
+    }
+
+    .btn-chaos.active {
+      background-color: var(--accent-muted);
+      color: var(--accent-primary);
+      outline: 1px solid var(--accent-primary);
+    }
+
+    .sandbox-console {
+      background-color: #080d1a;
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      font-size: 13px;
+      color: var(--text-primary);
+      overflow-y: auto;
+      max-height: 360px;
+      line-height: 1.6;
+    }
+
+    .sandbox-footer {
+      background-color: var(--surface-raised);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    /* Responsive */
+    @media (max-width: 1080px) {
+      .hero-grid {
+        grid-template-columns: 1fr;
+      }
+      .analytics-grid {
+        grid-template-columns: 1fr;
+      }
+      .grid-col-8, .grid-col-4, .grid-col-6, .grid-col-12 {
+        grid-column: span 1;
+      }
+      .sandbox-body {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Global Telemetry Status Bar -->
+  <div class="telemetry-bar" role="region" aria-label="System status telemetry">
+    <div class="telemetry-bar-left">
+      <div class="status-indicator">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>DAEMON: RUNNING (KERNEL eBPF v6.8.4)</span>
+      </div>
+      <div class="stat-badge">
+        <span>CLUSTER:</span>
+        <strong class="mono-num">prd-east-09.mesh</strong>
+      </div>
+      <div class="stat-badge">
+        <span>EVENT THROUGHPUT:</span>
+        <strong class="mono-num" id="eventThroughput">1,482,910 ev/s</strong>
+      </div>
+    </div>
+    <div class="telemetry-bar-right">
+      <div class="stat-badge">
+        <span>UTC:</span>
+        <strong class="mono-num" id="liveClock">00:00:00Z</strong>
+      </div>
+      <div class="stat-badge">
+        <span>ERROR BUDGET BURN:</span>
+        <strong class="mono-num" style="color: var(--accent-primary);" id="budgetBurn">0.038x (STABLE)</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    
+    <!-- Header / Brand Navigation -->
+    <header role="banner">
+      <a href="#overview" class="brand-id" aria-label="K-Trace Platform Home">
+        <div class="brand-mark" aria-hidden="true">K/T</div>
+        <div>
+          <div class="brand-title">K-TRACE</div>
+        </div>
+        <span class="brand-version">v4.19-SRE</span>
+      </a>
+
+      <nav aria-label="Primary Navigation">
+        <ul class="header-nav-items">
+          <li><a href="#slo-engine" class="nav-link">SLO Matrix</a></li>
+          <li><a href="#probes" class="nav-link">Kernel Probes</a></li>
+          <li><a href="#topology" class="nav-link">Mesh Ingress</a></li>
+          <li><button class="btn-utility" id="btnToggleAudio" aria-label="Toggle telemetry audio alerts">AUDIO: OFF</button></li>
+          <li><button class="btn-utility" id="btnExportPcap" aria-label="Export ring buffer pcap">DUMP PCAP</button></li>
+        </ul>
+      </nav>
+    </header>
+
+    <!-- Asymmetric 2-Column Hero Composition -->
+    <main>
+      <section class="hero-grid" aria-labelledby="hero-title">
+        
+        <!-- Left: Direct Value Proposition & Action Button -->
+        <article class="hero-left-pane">
+          <div>
+            <div class="system-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+              </svg>
+              Autonomous Kernel Observability
+            </div>
+            
+            <h1 class="hero-heading" id="hero-title">
+              Deterministic eBPF telemetry with <span class="accent-text">&lt;15ns</span> span overhead.
+            </h1>
+
+            <p class="hero-description">
+              Direct-attach socket layer tracing and multi-window error budget burn rate computation. Inspect distributed tail latencies, capture TCP zero-window anomalies, and isolate degraded microservice hops before SLA exhaustion.
+            </p>
+
+            <!-- Key SLO Metrics Strip -->
+            <div class="slo-strip" role="group" aria-label="Primary Service Level Indicators">
+              <div class="slo-card">
+                <div class="slo-card-label">SLA Target (30d)</div>
+                <div class="slo-card-value mono-num">99.995%</div>
+                <div class="slo-card-status">0.005% remaining</div>
+              </div>
+              <div class="slo-card">
+                <div class="slo-card-label">p99.9 Egress</div>
+                <div class="slo-card-value mono-num" id="heroP99">11.42ms</div>
+                <div class="slo-card-status">Threshold: 25.00ms</div>
+              </div>
+              <div class="slo-card">
+                <div class="slo-card-label">Socket Probes</div>
+                <div class="slo-card-value mono-num" id="heroProbeCount">8,419</div>
+                <div class="slo-card-status">0 dropped ring events</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hero Action Controls -->
+          <div class="hero-actions">
+            <button class="btn-primary" id="btnLaunchSandbox" aria-haspopup="dialog">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+              Launch sandbox
+            </button>
+            <button class="btn-secondary" id="btnAttachProbe" aria-label="Attach runtime eBPF daemon probe">
+              Attach eBPF daemon
+            </button>
+          </div>
+        </article>
+
+        <!-- Right: Live Interactive Code / Telemetry Terminal -->
+        <article class="terminal-pane" aria-label="Live SRE Telemetry Stream">
+          <div class="terminal-header">
+            <div class="terminal-tab-group" role="tablist" aria-label="Terminal views">
+              <button class="terminal-tab active" role="tab" aria-selected="true" data-cmd="probe">trace::auth-edge</button>
+              <button class="terminal-tab" role="tab" aria-selected="false" data-cmd="kprobe">kprobe::tcp_retransmit</button>
+              <button class="terminal-tab" role="tab" aria-selected="false" data-cmd="budget">slo::burn_multipliers</button>
+            </div>
+            
+            <div class="terminal-controls">
+              <button class="terminal-stream-btn is-streaming" id="btnToggleStream" aria-label="Toggle real-time log streaming">
+                <span class="stream-beacon" aria-hidden="true"></span>
+                <span id="streamBtnText">STREAMING</span>
+              </button>
+              <button class="terminal-stream-btn" id="btnClearTerminal" aria-label="Clear terminal output">CLEAR</button>
+            </div>
+          </div>
+
+          <div class="terminal-body" id="terminalOutput" role="log" aria-live="polite" aria-atomic="false">
+            <div class="terminal-line"><span class="t-time">14:04:39.102</span> <span class="t-level-info">[SYS]</span> <span class="t-probe">ebpf.c:148</span> <span class="t-msg">Loaded BPF program 'kprobe_tcp_v4_connect' (insns: 2048, verifier_time: 1.2ms)</span></div>
+            <div class="terminal-line"><span class="t-time">14:04:39.188</span> <span class="t-level-info">[NET]</span> <span class="t-probe">sock_ops</span> <span class="t-msg">Socket map initialized for pid: 38411 (service: auth-edge-prd)</span></div>
+            <div class="terminal-line"><span class="t-time">14:04:39.412</span> <span class="t-level-info">[TRA]</span> <span class="t-probe">trace.v2</span> <span class="t-msg">Span ID: <span class="t-param">0x8f2a1b</span> | path: /v1/oauth/token | status: 200 | duration: 4.81ms | rtt: 1.12ms</span></div>
+            <div class="terminal-line"><span class="t-time">14:04:39.851</span> <span class="t-level-info">[TRA]</span> <span class="t-probe">trace.v2</span> <span class="t-msg">Span ID: <span class="t-param">0x8f2a1c</span> | path: /v1/oauth/introspect | status: 200 | duration: 2.94ms | rtt: 0.98ms</span></div>
+            <div class="terminal-line highlight"><span class="t-time">14:04:40.014</span> <span class="t-level-warn">[WRN]</span> <span class="t-probe">tcp_drop</span> <span class="t-msg">TCP syn retransmission detected on peer: <span class="t-param">10.240.12.89:443</span> (backoff: 200ms)</span></div>
+            <div class="terminal-line"><span class="t-time">14:04:40.231</span> <span class="t-level-info">[TRA]</span> <span class="t-probe">trace.v2</span> <span class="t-msg">Span ID: <span class="t-param">0x8f2a1d</span> | path: /v1/session/verify | status: 200 | duration: 3.12ms | rtt: 1.05ms</span></div>
+          </div>
+
+          <form class="terminal-input-row" id="terminalForm" onsubmit="return false;">
+            <span class="terminal-prompt" aria-hidden="true">&gt;</span>
+            <input type="text" class="terminal-input" id="terminalCmdInput" placeholder="probe trace --service auth-edge --filter 'duration > 10ms'" aria-label="Terminal command input" autocomplete="off" spellcheck="false">
+            <button type="submit" class="terminal-run-btn" id="btnExecuteCmd">EXEC</button>
+          </form>
+        </article>
+
+      </section>
+
+      <!-- High-Density Telemetry Analytics Grid -->
+      <section id="slo-engine" aria-labelledby="telemetry-grid-title">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title" id="telemetry-grid-title">Telemetry & SLO Diagnostics Matrix</h2>
+            <div class="section-meta">Multi-window error budget burn rate & tail latency distribution</div>
+          </div>
+          <div class="card-actions-row">
+            <span class="density-chip active">Window: 1h / 6h / 3d</span>
+            <span class="density-chip">Aggregation: 10s P99</span>
+          </div>
+        </div>
+
+        <div class="analytics-grid">
+          
+          <!-- Surface 1: Real-time Latency Quantile Distribution -->
+          <div class="density-card grid-col-8">
+            <div class="card-header-row">
+              <div>
+                <div class="card-title">
+                  <span>Latency Quantiles (Kernel Egress to Service Mesh)</span>
+                </div>
+                <div class="card-subtext">Calculated over rolling 180s ring buffer with 100μs bucket precision</div>
+              </div>
+              <div class="card-actions-row">
+                <span class="density-chip active" id="badgeP99">p99: 11.4ms</span>
+                <span class="density-chip">p50: 1.8ms</span>
+              </div>
+            </div>
+
+            <!-- Canvas Chart Component -->
+            <div class="chart-container">
+              <canvas id="latencyCanvas" role="img" aria-label="Real-time latency distribution graph showing p50, p90, and p99 percentiles"></canvas>
+            </div>
+
+            <div class="chart-legend">
+              <div class="legend-item">
+                <span class="legend-indicator" style="background-color: var(--accent-primary);"></span>
+                <span>p99.9 Latency Tail (Amber)</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-indicator" style="background-color: #94a3b8;"></span>
+                <span>p90 Trend Line</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-indicator" style="background-color: #64748b;"></span>
+                <span>p50 Median</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Surface 2: Multi-Window Error Budget Burn Rate Matrix -->
+          <div class="density-card grid-col-4">
+            <div class="card-header-row">
+              <div>
+                <div class="card-title">Multi-Burn SLO Matrix</div>
+                <div class="card-subtext">Google SRE alert threshold guidelines</div>
+              </div>
+              <span class="density-chip active">3 Active SLIs</span>
+            </div>
+
+            <div class="dense-table-wrapper">
+              <table class="dense-table" aria-label="Error budget multi-window burn rate table">
+                <thead>
+                  <tr>
+                    <th>Window</th>
+                    <th>Burn Rate</th>
+                    <th>Budget Consumed</th>
+                    <th>Severity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>1 Hour</strong></td>
+                    <td class="burn-multiplier">1.24x</td>
+                    <td class="mono-num">0.17%</td>
+                    <td><span class="badge-status">OK</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>6 Hours</strong></td>
+                    <td class="burn-multiplier">0.82x</td>
+                    <td class="mono-num">0.68%</td>
+                    <td><span class="badge-status">OK</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>24 Hours</strong></td>
+                    <td class="burn-multiplier">1.05x</td>
+                    <td class="mono-num">3.20%</td>
+                    <td><span class="badge-status">OK</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>3 Days</strong></td>
+                    <td class="burn-multiplier">2.41x</td>
+                    <td class="mono-num">8.44%</td>
+                    <td><span class="badge-status warning">INVESTIGATE</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div style="margin-top: 14px; font-size: 12px; color: var(--text-muted); line-height: 1.45;">
+              Multi-window burn alerting enforces 14.4x 1h budget threshold triggers before automated failover sequence initiates.
+            </div>
+          </div>
+
+          <!-- Surface 3: eBPF Socket Probes & Hook Diagnostics -->
+          <div class="density-card grid-col-6" id="probes">
+            <div class="card-header-row">
+              <div>
+                <div class="card-title">Active eBPF Kernel Hooks</div>
+                <div class="card-subtext">Low-overhead bytecode verified at runtime</div>
+              </div>
+              <button class="btn-utility" id="btnReloadProbes" style="padding: 4px 8px; font-size: 11px;">RE-VERIFY</button>
+            </div>
+
+            <div class="hook-grid">
+              <div class="hook-card active" data-hook="sock_ops">
+                <div class="hook-card-header">
+                  <span class="hook-name">sock_ops/tcp_est</span>
+                  <span class="hook-overhead">11ns</span>
+                </div>
+                <div class="hook-desc">Extracts SYN-ACK round trip timing and initial window congestion state.</div>
+                <div class="hook-stats">
+                  <span>Invocations: <strong class="mono-num">4.2M/min</strong></span>
+                  <span>Drops: <strong class="mono-num">0</strong></span>
+                </div>
+              </div>
+
+              <div class="hook-card" data-hook="kprobe_ret">
+                <div class="hook-card-header">
+                  <span class="hook-name">kprobe/tcp_retransmit</span>
+                  <span class="hook-overhead">14ns</span>
+                </div>
+                <div class="hook-desc">Catches kernel retransmit timer expirations before TCP stack backoff.</div>
+                <div class="hook-stats">
+                  <span>Invocations: <strong class="mono-num">12.8k/min</strong></span>
+                  <span>Drops: <strong class="mono-num">0</strong></span>
+                </div>
+              </div>
+
+              <div class="hook-card" data-hook="tc_ingress">
+                <div class="hook-card-header">
+                  <span class="hook-name">sched_cls/ingress</span>
+                  <span class="hook-overhead">8ns</span>
+                </div>
+                <div class="hook-desc">Direct packet classifier parsing HTTP/2 and gRPC framing at eth0 NIC queue.</div>
+                <div class="hook-stats">
+                  <span>Invocations: <strong class="mono-num">19.4M/min</strong></span>
+                  <span>Drops: <strong class="mono-num">0</strong></span>
+                </div>
+              </div>
+
+              <div class="hook-card" data-hook="tracepoint_syscall">
+                <div class="hook-card-header">
+                  <span class="hook-name">tp/sys_enter_writev</span>
+                  <span class="hook-overhead">18ns</span>
+                </div>
+                <div class="hook-desc">Measures socket buffer write blocking delays on egress payload serialization.</div>
+                <div class="hook-stats">
+                  <span>Invocations: <strong class="mono-num">8.1M/min</strong></span>
+                  <span>Drops: <strong class="mono-num">0</strong></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Surface 4: Ingress Mesh Node Topology & Tail Latency -->
+          <div class="density-card grid-col-6" id="topology">
+            <div class="card-header-row">
+              <div>
+                <div class="card-title">Mesh Ingress Topology</div>
+                <div class="card-subtext">Real-time edge gateway routing &amp; memory allocations</div>
+              </div>
+              <span class="density-chip">3 Regions Active</span>
+            </div>
+
+            <div class="topology-list">
+              <div class="topo-item">
+                <div class="topo-node">
+                  <span class="topo-signal" aria-hidden="true"></span>
+                  <div>
+                    <div class="topo-name">ingress-edge-us-east-1a</div>
+                    <div class="topo-region">AWS Virginia • Envoy Proxy v1.29</div>
+                  </div>
+                </div>
+                <div class="topo-metrics">
+                  <div>RPS: <span class="topo-metric-val mono-num">142,400</span></div>
+                  <div>p99: <span class="topo-metric-val mono-num">8.2ms</span></div>
+                  <div>Err: <span class="topo-metric-val mono-num" style="color: var(--accent-primary);">0.002%</span></div>
+                </div>
+              </div>
+
+              <div class="topo-item">
+                <div class="topo-node">
+                  <span class="topo-signal" aria-hidden="true"></span>
+                  <div>
+                    <div class="topo-name">ingress-edge-us-west-2b</div>
+                    <div class="topo-region">AWS Oregon • Envoy Proxy v1.29</div>
+                  </div>
+                </div>
+                <div class="topo-metrics">
+                  <div>RPS: <span class="topo-metric-val mono-num">98,120</span></div>
+                  <div>p99: <span class="topo-metric-val mono-num">10.1ms</span></div>
+                  <div>Err: <span class="topo-metric-val mono-num">0.000%</span></div>
+                </div>
+              </div>
+
+              <div class="topo-item">
+                <div class="topo-node">
+                  <span class="topo-signal" aria-hidden="true"></span>
+                  <div>
+                    <div class="topo-name">ingress-edge-eu-central-1</div>
+                    <div class="topo-region">AWS Frankfurt • Envoy Proxy v1.29</div>
+                  </div>
+                </div>
+                <div class="topo-metrics">
+                  <div>RPS: <span class="topo-metric-val mono-num">112,890</span></div>
+                  <div>p99: <span class="topo-metric-val mono-num">12.8ms</span></div>
+                  <div>Err: <span class="topo-metric-val mono-num" style="color: var(--accent-primary);">0.009%</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Interactive SRE Sandbox Modal / Chaos Simulator -->
+  <div class="sandbox-backdrop" id="sandboxBackdrop" role="dialog" aria-modal="true" aria-labelledby="sandboxTitle" aria-hidden="true">
+    <div class="sandbox-modal">
+      <div class="sandbox-header">
+        <div class="sandbox-title-wrap">
+          <span class="sandbox-badge">ISOLATED SANDBOX</span>
+          <h3 class="headline" id="sandboxTitle" style="font-size: 18px;">eBPF Chaos &amp; Latency Injection Lab</h3>
+        </div>
+        <button class="close-btn" id="btnCloseSandbox" aria-label="Close sandbox modal">&times;</button>
+      </div>
+
+      <div class="sandbox-body">
+        <div class="sandbox-config-pane">
+          <div class="config-label">1. Select Synthetic Chaos Vector</div>
+          <div class="chaos-btn-group">
+            <button class="btn-chaos active" data-chaos="latency">+150ms Socket Jitter</button>
+            <button class="btn-chaos" data-chaos="drop">5% TCP Packet Drop</button>
+            <button class="btn-chaos" data-chaos="leak">Goroutine Leakage</button>
+            <button class="btn-chaos" data-chaos="retransmit">SYN Retransmit Burst</button>
+          </div>
+
+          <div class="config-label">2. Target Microservice</div>
+          <select id="targetServiceSelect" style="background-color: var(--surface-overlay); color: var(--text-primary); border: none; padding: 10px; font-family: var(--font-mono); font-size: 13px; border-radius: var(--radius-sm);">
+            <option value="auth-edge">auth-edge (Cluster Ingress)</option>
+            <option value="billing-ledger">billing-ledger (Transactional)</option>
+            <option value="graph-router">graph-router (Internal Mesh)</option>
+          </select>
+
+          <button class="btn-primary" id="btnInjectChaos" style="margin-top: 8px;">
+            Inject Fault Probe
+          </button>
+        </div>
+
+        <div>
+          <div class="config-label" style="margin-bottom: 8px;">Diagnostic Kernel Execution Log</div>
+          <div class="sandbox-console" id="sandboxConsoleOutput">
+            [SANDBOX INITIALIZED] Allocating isolated cgroup v2 namespace...<br>
+            [EBPF READY] Loaded test harness: bpf_chaos_injector.o<br>
+            [READY] Select a chaos vector on the left and click 'Inject Fault Probe'.
+          </div>
+        </div>
+      </div>
+
+      <div class="sandbox-footer">
+        <button class="btn-secondary" id="btnResetSandbox">Reset Harness</button>
+        <button class="btn-primary" id="btnDismissSandbox">Complete Evaluation</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Telemetry Engine & Interactive Logic -->
+  <script>
+    (function() {
+      'use strict';
+
+      // UTC Live Clock
+      const liveClock = document.getElementById('liveClock');
+      function updateClock() {
+        const now = new Date();
+        const hrs = String(now.getUTCHours()).padStart(2, '0');
+        const mins = String(now.getUTCMinutes()).padStart(2, '0');
+        const secs = String(now.getUTCSeconds()).padStart(2, '0');
+        liveClock.textContent = `${hrs}:${mins}:${secs}Z`;
+      }
+      setInterval(updateClock, 1000);
+      updateClock();
+
+      // Dynamic Throughput Ticker
+      const eventThroughput = document.getElementById('eventThroughput');
+      setInterval(() => {
+        const base = 1480000;
+        const delta = Math.floor((Math.random() - 0.48) * 18000);
+        const total = base + delta;
+        eventThroughput.textContent = total.toLocaleString() + ' ev/s';
+      }, 2000);
+
+      // Terminal Streaming Engine
+      const terminalOutput = document.getElementById('terminalOutput');
+      const btnToggleStream = document.getElementById('btnToggleStream');
+      const streamBtnText = document.getElementById('streamBtnText');
+      const btnClearTerminal = document.getElementById('btnClearTerminal');
+      const terminalCmdInput = document.getElementById('terminalCmdInput');
+      const terminalForm = document.getElementById('terminalForm');
+      const terminalTabs = document.querySelectorAll('.terminal-tab');
+
+      let isStreaming = true;
+      let streamInterval = null;
+
+      const sampleLogs = [
+        { level: 'INFO', probe: 'trace.v2', msg: 'Span ID: <span class="t-param">0x8f2a20</span> | path: /v2/session/renew | status: 200 | duration: 2.11ms | rtt: 0.84ms' },
+        { level: 'INFO', probe: 'sock_ops', msg: 'TCP connection pooled: src=10.240.4.11:51290 dst=10.240.12.89:443 (cwnd: 64)' },
+        { level: 'INFO', probe: 'trace.v2', msg: 'Span ID: <span class="t-param">0x8f2a21</span> | path: /v1/telemetry/push | status: 204 | duration: 1.45ms | rtt: 0.62ms' },
+        { level: 'WARN', probe: 'kprobe', msg: 'Tail latency jitter > 18ms detected in cgroup: <span class="t-param">kubepods.slice/auth-edge</span>' },
+        { level: 'INFO', probe: 'trace.v2', msg: 'Span ID: <span class="t-param">0x8f2a22</span> | path: /v1/oauth/introspect | status: 200 | duration: 3.82ms | rtt: 1.10ms' },
+        { level: 'INFO', probe: 'sched_cls', msg: 'eBPF TC classifier processed 24,000 packets/s with 0 drop counter on eth0' }
+      ];
+
+      function formatTimestamp() {
+        const d = new Date();
+        const h = String(d.getUTCHours()).padStart(2, '0');
+        const m = String(d.getUTCMinutes()).padStart(2, '0');
+        const s = String(d.getUTCSeconds()).padStart(2, '0');
+        const ms = String(d.getUTCMilliseconds()).padStart(3, '0');
+        return `${h}:${m}:${s}.${ms}`;
+      }
+
+      function appendTerminalLine(level, probe, msg, highlight = false) {
+        const line = document.createElement('div');
+        line.className = 'terminal-line' + (highlight ? ' highlight' : '');
+        const levelSpan = level === 'WARN' 
+          ? '<span class="t-level-warn">[WRN]</span>' 
+          : '<span class="t-level-info">[TRA]</span>';
+        
+        line.innerHTML = `<span class="t-time">${formatTimestamp()}</span> ${levelSpan} <span class="t-probe">${probe}</span> <span class="t-msg">${msg}</span>`;
+        terminalOutput.appendChild(line);
+        terminalOutput.scrollTop = terminalOutput.scrollHeight;
+
+        // Keep maximum 60 items in buffer for performance
+        if (terminalOutput.children.length > 60) {
+          terminalOutput.removeChild(terminalOutput.firstElementChild);
+        }
+      }
+
+      function startStreaming() {
+        if (streamInterval) clearInterval(streamInterval);
+        streamInterval = setInterval(() => {
+          if (!isStreaming) return;
+          const log = sampleLogs[Math.floor(Math.random() * sampleLogs.length)];
+          const isWarn = log.level === 'WARN';
+          appendTerminalLine(log.level, log.probe, log.msg, isWarn);
+        }, 1600);
+      }
+
+      startStreaming();
+
+      btnToggleStream.addEventListener('click', () => {
+        isStreaming = !isStreaming;
+        if (isStreaming) {
+          btnToggleStream.classList.add('is-streaming');
+          streamBtnText.textContent = 'STREAMING';
+        } else {
+          btnToggleStream.classList.remove('is-streaming');
+          streamBtnText.textContent = 'PAUSED';
+        }
+      });
+
+      btnClearTerminal.addEventListener('click', () => {
+        terminalOutput.innerHTML = '';
+        appendTerminalLine('INFO', 'sys', 'Buffer flushed. Terminal initialized.');
+      });
+
+      // Terminal Tab Switcher
+      terminalTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          terminalTabs.forEach(t => {
+            t.classList.remove('active');
+            t.setAttribute('aria-selected', 'false');
+          });
+          tab.classList.add('active');
+          tab.setAttribute('aria-selected', 'true');
+          const cmdType = tab.dataset.cmd;
+          appendTerminalLine('INFO', 'daemon', `Switched probe filter context to: <span class="t-param">${tab.textContent}</span>`, true);
+        });
+      });
+
+      // Terminal Command Form Execution
+      terminalForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const cmd = terminalCmdInput.value.trim();
+        if (!cmd) return;
+        appendTerminalLine('INFO', 'exec', `&gt; ${cmd}`, true);
+        terminalCmdInput.value = '';
+
+        setTimeout(() => {
+          appendTerminalLine('INFO', 'exec', `Command dispatched to eBPF ring buffer. (Return: 0, Output: OK)`);
+        }, 300);
+      });
+
+      // Latency Chart Canvas Renderer (High-performance 60fps / interval-driven)
+      const canvas = document.getElementById('latencyCanvas');
+      const ctx = canvas.getContext('2d');
+
+      let chartPointsP99 = [];
+      let chartPointsP90 = [];
+      let chartPointsP50 = [];
+      const totalPoints = 48;
+
+      // Seed initial points
+      for (let i = 0; i < totalPoints; i++) {
+        chartPointsP99.push(11 + (Math.sin(i * 0.4) * 2.5) + (Math.random() * 1.8));
+        chartPointsP90.push(6 + (Math.sin(i * 0.3) * 1.2) + (Math.random() * 0.8));
+        chartPointsP50.push(1.8 + (Math.random() * 0.4));
+      }
+
+      function resizeCanvas() {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        canvas.width = rect.width * window.devicePixelRatio;
+        canvas.height = rect.height * window.devicePixelRatio;
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      }
+
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      function drawLatencyChart() {
+        const width = canvas.width / window.devicePixelRatio;
+        const height = canvas.height / window.devicePixelRatio;
+
+        ctx.clearRect(0, 0, width, height);
+
+        // Draw horizontal grid lines (Lightness shifted)
+        ctx.strokeStyle = 'rgba(244, 244, 245, 0.05)';
+        ctx.lineWidth = 1;
+        const gridSteps = 4;
+        for (let i = 1; i < gridSteps; i++) {
+          const y = (height / gridSteps) * i;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(width, y);
+          ctx.stroke();
+        }
+
+        const maxVal = 25; // 25ms upper bound
+        const stepX = width / (totalPoints - 1);
+
+        function renderLine(data, color, fill = false, lineWidth = 2) {
+          ctx.beginPath();
+          data.forEach((val, index) => {
+            const x = index * stepX;
+            const y = height - (val / maxVal) * (height - 20) - 10;
+            if (index === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+
+          if (fill) {
+            ctx.lineTo(width, height);
+            ctx.lineTo(0, height);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.08)';
+            ctx.fill();
+          } else {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = lineWidth;
+            ctx.stroke();
+          }
+        }
+
+        // Draw Area Fill for P99 (Amber)
+        renderLine(chartPointsP99, '#f59e0b', true);
+        
+        // Draw Lines
+        renderLine(chartPointsP50, '#64748b', false, 1.5);
+        renderLine(chartPointsP90, '#94a3b8', false, 1.5);
+        renderLine(chartPointsP99, '#f59e0b', false, 2.5);
+      }
+
+      setInterval(() => {
+        // Shift data
+        chartPointsP99.shift();
+        chartPointsP90.shift();
+        chartPointsP50.shift();
+
+        const latestP99 = 11 + (Math.sin(Date.now() * 0.001) * 2.2) + (Math.random() * 1.5);
+        const latestP90 = 6 + (Math.random() * 0.9);
+        const latestP50 = 1.8 + (Math.random() * 0.3);
+
+        chartPointsP99.push(latestP99);
+        chartPointsP90.push(latestP90);
+        chartPointsP50.push(latestP50);
+
+        document.getElementById('heroP99').textContent = latestP99.toFixed(2) + 'ms';
+        document.getElementById('badgeP99').textContent = 'p99: ' + latestP99.toFixed(1) + 'ms';
+
+        drawLatencyChart();
+      }, 1000);
+
+      drawLatencyChart();
+
+      // Hook Card Interaction
+      const hookCards = document.querySelectorAll('.hook-card');
+      hookCards.forEach(card => {
+        card.addEventListener('click', () => {
+          hookCards.forEach(c => c.classList.remove('active'));
+          card.classList.add('active');
+          const hook = card.dataset.hook;
+          appendTerminalLine('INFO', 'hook', `Attached live diagnostic probe to hook: <span class="t-param">${hook}</span>`, true);
+        });
+      });
+
+      // Re-verify probes button
+      document.getElementById('btnReloadProbes').addEventListener('click', function() {
+        this.textContent = 'VERIFYING...';
+        setTimeout(() => {
+          this.textContent = 'RE-VERIFIED (OK)';
+          setTimeout(() => { this.textContent = 'RE-VERIFY'; }, 2000);
+        }, 600);
+      });
+
+      // Quick attach eBPF daemon button
+      document.getElementById('btnAttachProbe').addEventListener('click', function() {
+        this.textContent = 'ATTACHED (OK)';
+        appendTerminalLine('INFO', 'daemon', 'eBPF daemon re-synchronized with kernel ring buffer map.', true);
+        setTimeout(() => { this.textContent = 'Attach eBPF daemon'; }, 2500);
+      });
+
+      // Audio Toggle Button
+      const btnToggleAudio = document.getElementById('btnToggleAudio');
+      let audioOn = false;
+      btnToggleAudio.addEventListener('click', () => {
+        audioOn = !audioOn;
+        btnToggleAudio.textContent = audioOn ? 'AUDIO: ON (SLO ALERT)' : 'AUDIO: OFF';
+        btnToggleAudio.style.color = audioOn ? 'var(--accent-primary)' : 'var(--text-primary)';
+      });
+
+      // Dump PCAP Button
+      document.getElementById('btnExportPcap').addEventListener('click', function() {
+        this.textContent = 'DUMPING...';
+        setTimeout(() => {
+          this.textContent = 'DUMPED (14.2MB)';
+          appendTerminalLine('INFO', 'pcap', 'Ring buffer flushed to /var/log/ktrace/dump_ring_0.pcap');
+          setTimeout(() => { this.textContent = 'DUMP PCAP'; }, 3000);
+        }, 800);
+      });
+
+      // =========================================================================
+      // SANDBOX MODAL / INTERACTIVE FAULT INJECTION HARNESS
+      // =========================================================================
+      const btnLaunchSandbox = document.getElementById('btnLaunchSandbox');
+      const sandboxBackdrop = document.getElementById('sandboxBackdrop');
+      const btnCloseSandbox = document.getElementById('btnCloseSandbox');
+      const btnDismissSandbox = document.getElementById('btnDismissSandbox');
+      const btnResetSandbox = document.getElementById('btnResetSandbox');
+      const btnInjectChaos = document.getElementById('btnInjectChaos');
+      const chaosButtons = document.querySelectorAll('.btn-chaos');
+      const sandboxConsole = document.getElementById('sandboxConsoleOutput');
+      const targetServiceSelect = document.getElementById('targetServiceSelect');
+
+      let activeChaos = 'latency';
+
+      function openSandbox() {
+        sandboxBackdrop.classList.add('open');
+        sandboxBackdrop.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeSandbox() {
+        sandboxBackdrop.classList.remove('open');
+        sandboxBackdrop.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      }
+
+      btnLaunchSandbox.addEventListener('click', openSandbox);
+      btnCloseSandbox.addEventListener('click', closeSandbox);
+      btnDismissSandbox.addEventListener('click', closeSandbox);
+
+      sandboxBackdrop.addEventListener('click', (e) => {
+        if (e.target === sandboxBackdrop) closeSandbox();
+      });
+
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && sandboxBackdrop.classList.contains('open')) {
+          closeSandbox();
+        }
+      });
+
+      chaosButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          chaosButtons.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          activeChaos = btn.dataset.chaos;
+        });
+      });
+
+      btnInjectChaos.addEventListener('click', () => {
+        const target = targetServiceSelect.value;
+        btnInjectChaos.textContent = 'Injecting Fault...';
+        btnInjectChaos.disabled = true;
+
+        const timestamp = formatTimestamp();
+        let logMsg = '';
+        if (activeChaos === 'latency') {
+          logMsg = `[${timestamp}] [INJECT] Synthetic latency (+150ms) applied to cgroup: ${target}. Monitoring p99 tail latency budget...`;
+        } else if (activeChaos === 'drop') {
+          logMsg = `[${timestamp}] [INJECT] 5% TCP drop filter attached at TC ingress for: ${target}. SYN-ACK retransmits surging...`;
+        } else if (activeChaos === 'leak') {
+          logMsg = `[${timestamp}] [INJECT] Simulating goroutine channel leak in ${target}. Heap profiling triggered...`;
+        } else {
+          logMsg = `[${timestamp}] [INJECT] Triggering SYN flood retransmission test on ${target}. Window scaling observed...`;
+        }
+
+        setTimeout(() => {
+          sandboxConsole.innerHTML += `<br><span style="color: var(--accent-primary);">${logMsg}</span>`;
+          sandboxConsole.innerHTML += `<br>[${formatTimestamp()}] [eBPF TELEMETRY] Anomaly isolated in 12ms. Multi-burn rate alert evaluated.`;
+          sandboxConsole.scrollTop = sandboxConsole.scrollHeight;
+
+          btnInjectChaos.textContent = 'Inject Fault Probe';
+          btnInjectChaos.disabled = false;
+          
+          // Also feed to main hero terminal
+          appendTerminalLine('WARN', 'chaos_lab', `Injected fault vector '${activeChaos}' onto ${target}`, true);
+        }, 700);
+      });
+
+      btnResetSandbox.addEventListener('click', () => {
+        sandboxConsole.innerHTML = `[${formatTimestamp()}] [RESET] Flushed all chaos probes. Cgroup network filters restored to baseline.`;
+      });
+
+    })();
+  </script>
+</body>
+</html>

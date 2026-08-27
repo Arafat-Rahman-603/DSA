@@ -1,0 +1,2331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="K/TRACE: Deterministic eBPF Observability and SRE Command Center for Linux Kernel Tracing, Distributed Latency, and SLO Diagnostics.">
+  <title>K/TRACE :: Autonomous eBPF Kernel Observability &amp; SRE Platform</title>
+
+  <!-- Google Fonts: JetBrains Mono & Space Grotesk / Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ==========================================================================
+       DESIGN SYSTEM CONSTANTS (STRICT FLAT DARK TECHNICAL SRE AESTHETIC - NO GRADIENTS)
+       ========================================================================== */
+    :root {
+      --bg-base: #060709;
+      --bg-surface-0: #0a0c10;
+      --bg-surface-1: #0f1217;
+      --bg-surface-2: #151922;
+      --bg-surface-3: #1c222e;
+      --bg-surface-hover: #222938;
+
+      --border-subtle: #181d26;
+      --border-medium: #242c3b;
+      --border-strong: #364259;
+      --border-accent: #00d2ff;
+
+      --accent-blue: #00d2ff;
+      --accent-blue-dim: #0088b3;
+      --accent-blue-soft: #0c2636;
+      
+      --status-green: #10b981;
+      --status-green-dim: #064e3b;
+      --status-amber: #f59e0b;
+      --status-amber-dim: #78350f;
+      --status-red: #ef4444;
+      --status-red-dim: #7f1d1d;
+      --status-purple: #a855f7;
+
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --text-dim: #475569;
+      --text-blue: #38bdf8;
+
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+      --radius-sm: 2px;
+      --radius-base: 3px;
+      --header-height: 48px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background-color: var(--bg-base);
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+      background-size: 32px 32px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg-surface-0);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-strong);
+      border-radius: 0px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--accent-blue-dim);
+    }
+
+    /* Common Typography */
+    .mono {
+      font-family: var(--font-mono);
+      letter-spacing: -0.02em;
+    }
+
+    .badge-mono {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 2px 6px;
+      border: 1px solid var(--border-medium);
+      background: var(--bg-surface-1);
+      color: var(--text-secondary);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: var(--radius-sm);
+    }
+
+    .indicator-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .indicator-dot.green { background-color: var(--status-green); box-shadow: 0 0 6px var(--status-green); }
+    .indicator-dot.amber { background-color: var(--status-amber); box-shadow: 0 0 6px var(--status-amber); }
+    .indicator-dot.red { background-color: var(--status-red); box-shadow: 0 0 6px var(--status-red); }
+    .indicator-dot.blue { background-color: var(--accent-blue); box-shadow: 0 0 6px var(--accent-blue); }
+    .indicator-dot.pulse {
+      animation: pulse-glow 1.5s infinite ease-in-out;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* Buttons */
+    .btn {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 8px 14px;
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-decoration: none;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--accent-blue);
+      color: #040810;
+      border: 1px solid var(--accent-blue);
+    }
+    .btn-primary:hover {
+      background: #38bdf8;
+      border-color: #38bdf8;
+      box-shadow: 0 0 10px rgba(0, 210, 255, 0.35);
+    }
+
+    .btn-secondary {
+      background: var(--bg-surface-2);
+      color: var(--text-primary);
+      border: 1px solid var(--border-strong);
+    }
+    .btn-secondary:hover {
+      background: var(--bg-surface-hover);
+      border-color: var(--accent-blue-dim);
+      color: #fff;
+    }
+
+    .btn-control {
+      background: var(--bg-surface-0);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-subtle);
+      font-size: 10px;
+      padding: 5px 9px;
+    }
+    .btn-control:hover {
+      background: var(--bg-surface-2);
+      border-color: var(--border-strong);
+      color: var(--text-primary);
+    }
+    .btn-control.active {
+      background: var(--accent-blue-soft);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+
+    /* Panels & Containers */
+    .panel {
+      background: var(--bg-surface-1);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-base);
+      position: relative;
+    }
+    .panel-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-surface-0);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .panel-title {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .panel-title::before {
+      content: '//';
+      color: var(--accent-blue);
+      font-weight: 400;
+    }
+
+    /* ==========================================================================
+       NAVIGATION BAR
+       ========================================================================== */
+    .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      height: var(--header-height);
+      background: var(--bg-surface-0);
+      border-bottom: 1px solid var(--border-medium);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+    }
+    .brand-symbol {
+      width: 22px;
+      height: 22px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--accent-blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-blue);
+      font-family: var(--font-mono);
+      font-weight: 800;
+      font-size: 12px;
+    }
+    .brand-name {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #fff;
+    }
+    .brand-version {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--accent-blue);
+      background: var(--accent-blue-soft);
+      border: 1px solid var(--accent-blue-dim);
+      padding: 2px 5px;
+      border-radius: var(--radius-sm);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      list-style: none;
+      margin-left: 12px;
+    }
+    .nav-links a {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-decoration: none;
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      transition: all 0.15s;
+    }
+    .nav-links a:hover {
+      color: var(--text-primary);
+      background: var(--bg-surface-2);
+      border-color: var(--border-medium);
+    }
+    .nav-links a.active {
+      color: var(--accent-blue);
+      background: var(--bg-surface-1);
+      border-color: var(--border-medium);
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .kernel-health-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-surface-1);
+      border: 1px solid var(--border-subtle);
+      padding: 4px 8px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+
+    /* ==========================================================================
+       MAIN CONTENT LAYOUT
+       ========================================================================== */
+    .main-container {
+      max-width: 1480px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 20px 16px 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* ==========================================================================
+       HERO & SYSTEM OVERVIEW
+       ========================================================================== */
+    .hero-section {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .hero-main {
+      background: var(--bg-surface-1);
+      border: 1px solid var(--border-medium);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      border-left: 3px solid var(--accent-blue);
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent-blue);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 12px;
+    }
+
+    .hero-headline {
+      font-family: var(--font-sans);
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.18;
+      color: #fff;
+      margin-bottom: 14px;
+    }
+
+    .hero-description {
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+      max-width: 680px;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: auto;
+      padding-top: 14px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    /* Live Metrics Panel */
+    .hero-metrics-grid {
+      display: grid;
+      grid-template-rows: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .metric-card {
+      background: var(--bg-surface-1);
+      border: 1px solid var(--border-subtle);
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: border-color 0.15s;
+    }
+    .metric-card:hover {
+      border-color: var(--border-strong);
+    }
+
+    .metric-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .metric-label {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .metric-tag {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      color: var(--status-green);
+      background: var(--status-green-dim);
+      padding: 1px 5px;
+      border-radius: var(--radius-sm);
+    }
+
+    .metric-val-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .metric-value {
+      font-family: var(--font-mono);
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: #fff;
+    }
+    .metric-sparkline-canvas {
+      width: 110px;
+      height: 28px;
+    }
+
+    .metric-subinfo {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .metric-subinfo span {
+      color: var(--text-secondary);
+    }
+
+    /* ==========================================================================
+       SECTION 2: LIVE TELEMETRY STREAM (TERMINAL)
+       ========================================================================== */
+    .stream-container {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    .terminal-panel {
+      background: #08090d;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-base);
+      display: flex;
+      flex-direction: column;
+      height: 340px;
+    }
+
+    .terminal-header {
+      background: var(--bg-surface-0);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .terminal-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .terminal-chip {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 3px 8px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .terminal-chip.active {
+      border-color: var(--accent-blue-dim);
+      color: var(--accent-blue);
+      background: var(--accent-blue-soft);
+    }
+
+    .terminal-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .terminal-body {
+      flex: 1;
+      padding: 12px 14px;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.55;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      background: #07080b;
+    }
+
+    .log-line {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      white-space: nowrap;
+      animation: log-fade-in 0.2s ease-out;
+      border-left: 2px solid transparent;
+      padding-left: 4px;
+    }
+    .log-line:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    @keyframes log-fade-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-time {
+      color: var(--text-dim);
+      flex-shrink: 0;
+    }
+    .log-tag {
+      font-weight: 700;
+      padding: 0 4px;
+      border-radius: var(--radius-sm);
+      flex-shrink: 0;
+      font-size: 10px;
+    }
+    .log-tag.sys { color: #38bdf8; background: #0c2738; }
+    .log-tag.net { color: #818cf8; background: #1e1e38; }
+    .log-tag.tra { color: #34d399; background: #06402b; }
+    .log-tag.wrn { color: #fbbf24; background: #3d2c06; }
+    .log-tag.err { color: #f87171; background: #451313; }
+
+    .log-content {
+      color: var(--text-secondary);
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .log-content .highlight {
+      color: #fff;
+    }
+    .log-content .metric-hi {
+      color: var(--accent-blue);
+    }
+    .log-content .warn-hi {
+      color: #fbbf24;
+    }
+
+    /* ==========================================================================
+       SECTION 3: TELEMETRY & SLO DIAGNOSTICS MATRIX (CHART + TABLE)
+       ========================================================================== */
+    .diagnostics-section {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 16px;
+    }
+
+    /* Real-Time Latency Graph */
+    .chart-panel {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .chart-stats-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 14px;
+      background: var(--bg-surface-0);
+      border-bottom: 1px solid var(--border-subtle);
+      flex-wrap: wrap;
+    }
+
+    .stat-pill {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .stat-pill .dot { width: 8px; height: 8px; border-radius: 1px; }
+    .stat-pill .val { font-weight: 700; color: #fff; }
+
+    .chart-wrapper {
+      position: relative;
+      flex: 1;
+      min-height: 240px;
+      background: var(--bg-surface-1);
+      padding: 10px;
+    }
+
+    #latencyChart {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .chart-tooltip {
+      position: absolute;
+      display: none;
+      pointer-events: none;
+      background: var(--bg-surface-0);
+      border: 1px solid var(--accent-blue-dim);
+      padding: 6px 10px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: #fff;
+      z-index: 10;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    /* SLO Matrix Table */
+    .slo-table-panel {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .table-container {
+      overflow-x: auto;
+      flex: 1;
+    }
+
+    .technical-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      text-align: left;
+    }
+
+    .technical-table th {
+      background: var(--bg-surface-0);
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.05em;
+    }
+
+    .technical-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+    }
+
+    .technical-table tr:hover td {
+      background: var(--bg-surface-2);
+      color: var(--text-primary);
+    }
+
+    .technical-table tr.alert-row td {
+      background: rgba(245, 158, 11, 0.04);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+    .status-badge.ok { color: var(--status-green); }
+    .status-badge.investigate { color: var(--status-amber); }
+    .status-badge.critical { color: var(--status-red); }
+
+    .burn-bar-container {
+      width: 60px;
+      height: 4px;
+      background: var(--bg-surface-3);
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 6px;
+    }
+    .burn-bar-fill {
+      height: 100%;
+      background: var(--status-green);
+    }
+    .burn-bar-fill.amber { background: var(--status-amber); }
+    .burn-bar-fill.red { background: var(--status-red); }
+
+    /* ==========================================================================
+       SECTION 4: ACTIVE KERNEL PROBES
+       ========================================================================== */
+    .probes-section {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    .probes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 12px;
+      padding: 14px;
+      background: var(--bg-surface-1);
+    }
+
+    .probe-card {
+      background: var(--bg-surface-0);
+      border: 1px solid var(--border-subtle);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+    .probe-card:hover {
+      border-color: var(--border-strong);
+      background: var(--bg-surface-2);
+    }
+    .probe-card.verified {
+      border-left: 2px solid var(--status-green);
+    }
+
+    .probe-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .probe-name {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .probe-overhead {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--accent-blue);
+      background: var(--accent-blue-soft);
+      border: 1px solid var(--accent-blue-dim);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+    }
+
+    .probe-desc {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .probe-meta-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 6px;
+    }
+    .probe-meta-row span strong {
+      color: var(--text-secondary);
+    }
+
+    /* ==========================================================================
+       SECTION 5: INFRASTRUCTURE TOPOLOGY
+       ========================================================================== */
+    .topology-panel {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topology-canvas-wrapper {
+      position: relative;
+      height: 380px;
+      background: #080a0e;
+      overflow: hidden;
+    }
+
+    #topologyCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .topology-hud {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(10, 12, 16, 0.85);
+      border: 1px solid var(--border-subtle);
+      padding: 8px 12px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-secondary);
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .topology-hud-val {
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .topology-legend {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      background: rgba(10, 12, 16, 0.85);
+      border: 1px solid var(--border-subtle);
+      padding: 6px 10px;
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Node Details Sidebar / Drawer (Integrated) */
+    .topology-node-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      padding: 12px;
+      background: var(--bg-surface-0);
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .topo-card {
+      background: var(--bg-surface-1);
+      border: 1px solid var(--border-subtle);
+      padding: 8px 10px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .topo-card:hover, .topo-card.active {
+      border-color: var(--accent-blue);
+      background: var(--bg-surface-2);
+    }
+    .topo-card-title {
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .topo-card-stats {
+      color: var(--text-muted);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+      font-size: 9.5px;
+    }
+    .topo-card-stats span b {
+      color: var(--text-secondary);
+    }
+
+    /* ==========================================================================
+       MODALS & POPUPS
+       ========================================================================== */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(2px);
+      z-index: 999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-dialog {
+      background: var(--bg-surface-1);
+      border: 1px solid var(--border-strong);
+      max-width: 620px;
+      width: 100%;
+      border-radius: var(--radius-base);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+      animation: modal-enter 0.18s ease-out;
+    }
+
+    @keyframes modal-enter {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .modal-header {
+      padding: 12px 16px;
+      background: var(--bg-surface-0);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-title {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .modal-body {
+      padding: 16px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    .modal-code-block {
+      background: #06070a;
+      border: 1px solid var(--border-subtle);
+      padding: 12px;
+      color: #38bdf8;
+      margin: 10px 0;
+      overflow-x: auto;
+      user-select: all;
+    }
+    .modal-footer {
+      padding: 12px 16px;
+      background: var(--bg-surface-0);
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    /* Toast Notifications */
+    .toast-container {
+      position: fixed;
+      bottom: 40px;
+      right: 20px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      background: var(--bg-surface-0);
+      border: 1px solid var(--border-strong);
+      padding: 8px 14px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #fff;
+      border-left: 3px solid var(--accent-blue);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+      animation: toast-in 0.2s ease-out;
+      pointer-events: auto;
+    }
+    @keyframes toast-in {
+      from { transform: translateX(20px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* ==========================================================================
+       BOTTOM TECHNICAL STATUS BAR (SRE HUD FOOTER)
+       ========================================================================== */
+    .status-footer {
+      margin-top: auto;
+      height: 28px;
+      background: var(--bg-surface-0);
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      user-select: none;
+    }
+    .status-footer-left, .status-footer-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .status-item b {
+      color: var(--text-secondary);
+    }
+
+    /* Responsive Queries */
+    @media (max-width: 1024px) {
+      .hero-section {
+        grid-template-columns: 1fr;
+      }
+      .diagnostics-section {
+        grid-template-columns: 1fr;
+      }
+      .topology-node-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .nav-links {
+        display: none;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .hero-metrics-grid {
+        grid-template-rows: auto;
+      }
+      .topology-node-grid {
+        grid-template-columns: 1fr;
+      }
+      .chart-stats-bar {
+        gap: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==========================================================================
+       TOP STICKY NAVIGATION BAR
+       ========================================================================== -->
+  <nav class="navbar">
+    <div class="nav-left">
+      <a href="#overview" class="brand-logo">
+        <div class="brand-symbol">K</div>
+        <span class="brand-name">K/TRACE</span>
+        <span class="brand-version">v4.19-SRE</span>
+      </a>
+
+      <ul class="nav-links">
+        <li><a href="#overview" class="active">Overview</a></li>
+        <li><a href="#slo-matrix">SLO Matrix</a></li>
+        <li><a href="#probes">Kernel Probes</a></li>
+        <li><a href="#telemetry">Mesh Ingress</a></li>
+        <li><a href="#topology">Topology</a></li>
+      </ul>
+    </div>
+
+    <div class="nav-right">
+      <div class="kernel-health-pill">
+        <span class="indicator-dot green pulse"></span>
+        <span>EBPF JIT: ACTIVE</span>
+      </div>
+
+      <button id="audioToggleBtn" class="btn btn-control" onclick="toggleAudioEngine()">
+        <span id="audioIcon">🔇</span>
+        <span id="audioLabel">AUDIO: OFF</span>
+      </button>
+
+      <button id="dumpPcapBtn" class="btn btn-control" onclick="triggerPcapDump()">
+        <span>⭳</span>
+        <span>DUMP PCAP</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ==========================================================================
+       MAIN COMMAND CENTER INTERFACE
+       ========================================================================== -->
+  <main class="main-container">
+
+    <!-- HERO / SYSTEM OVERVIEW -->
+    <section id="overview" class="hero-section">
+      <!-- Left Hero Overview -->
+      <div class="hero-main">
+        <div>
+          <div class="hero-eyebrow">
+            <span class="indicator-dot blue pulse"></span>
+            AUTONOMOUS KERNEL OBSERVABILITY
+          </div>
+          <h1 class="hero-headline">
+            Deterministic eBPF telemetry with &lt;15ns span overhead.
+          </h1>
+          <p class="hero-description">
+            Direct kernel-level tracing via BPF ring buffers, socket monitoring, distributed latency analysis, 
+            TCP anomaly detection, and sub-millisecond SLO error-budget monitoring across bare-metal and k8s topologies.
+          </p>
+        </div>
+
+        <div class="hero-actions">
+          <button class="btn btn-primary" onclick="openModal('sandboxModal')">
+            <span>⚡</span> LAUNCH SANDBOX
+          </button>
+          <button class="btn btn-secondary" onclick="openModal('daemonModal')">
+            <span>⎈</span> ATTACH EBPF DAEMON
+          </button>
+          <div class="badge-mono" style="margin-left: auto;">
+            <span>BPF MAPS:</span> <strong style="color:#fff;">1,024</strong>
+          </div>
+          <div class="badge-mono">
+            <span>RINGBUF:</span> <strong style="color:var(--status-green);">2.4 MB/s</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Live Prominent Metrics -->
+      <div class="hero-metrics-grid">
+        <!-- SLA Target -->
+        <div class="metric-card">
+          <div class="metric-card-top">
+            <span class="metric-label">SLA Target</span>
+            <span class="metric-tag">30D ROLLING</span>
+          </div>
+          <div class="metric-val-row">
+            <div class="metric-value" id="liveSlaValue">99.995%</div>
+            <canvas id="sparklineSla" class="metric-sparkline-canvas" width="110" height="28"></canvas>
+          </div>
+          <div class="metric-subinfo">
+            Error Budget Left: <span>89.2%</span> &bull; Burn: <span>0.94x</span>
+          </div>
+        </div>
+
+        <!-- P99.9 Egress -->
+        <div class="metric-card">
+          <div class="metric-card-top">
+            <span class="metric-label">P99.9 Egress</span>
+            <span class="metric-tag" style="color:var(--accent-blue); background:var(--accent-blue-soft);">KERNEL HOOK</span>
+          </div>
+          <div class="metric-val-row">
+            <div class="metric-value" id="liveP99Egress">11.74ms</div>
+            <canvas id="sparklineEgress" class="metric-sparkline-canvas" width="110" height="28"></canvas>
+          </div>
+          <div class="metric-subinfo">
+            Jitter: <span>&plusmn;0.42ms</span> &bull; Drift: <span>-0.18ms</span>
+          </div>
+        </div>
+
+        <!-- Socket Probes -->
+        <div class="metric-card">
+          <div class="metric-card-top">
+            <span class="metric-label">Socket Probes</span>
+            <span class="metric-tag" style="color:var(--text-secondary); background:var(--bg-surface-2);">VERIFIED JIT</span>
+          </div>
+          <div class="metric-val-row">
+            <div class="metric-value" id="liveSocketProbes">8,419</div>
+            <canvas id="sparklineProbes" class="metric-sparkline-canvas" width="110" height="28"></canvas>
+          </div>
+          <div class="metric-subinfo">
+            Active Maps: <span>1,024</span> &bull; TC Filters: <span>412</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LIVE TELEMETRY STREAM (TERMINAL) -->
+    <section id="telemetry" class="stream-container">
+      <div class="terminal-panel">
+        <div class="terminal-header">
+          <div class="terminal-header-left">
+            <div class="panel-title" style="margin-right: 8px;">LIVE TELEMETRY STREAM</div>
+            <div class="terminal-chip active" onclick="filterLogs('all', this)">trace::all</div>
+            <div class="terminal-chip" onclick="filterLogs('auth-edge', this)">trace::auth-edge</div>
+            <div class="terminal-chip" onclick="filterLogs('tcp_retransmit', this)">kprobe::tcp_retransmit</div>
+            <div class="terminal-chip" onclick="filterLogs('burn_multipliers', this)">slo::burn_multipliers</div>
+          </div>
+
+          <div class="terminal-controls">
+            <div class="badge-mono" style="border-color: var(--status-green-dim); color: var(--status-green);">
+              <span class="indicator-dot green pulse"></span>
+              <span>STREAMING</span>
+            </div>
+            <button class="btn btn-control" id="streamPauseBtn" onclick="toggleStreamPause()">PAUSE</button>
+            <button class="btn btn-control" onclick="clearLogStream()">CLEAR</button>
+          </div>
+        </div>
+
+        <div class="terminal-body" id="terminalLogBody">
+          <!-- Dynamically populated streaming logs -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TELEMETRY & SLO DIAGNOSTICS MATRIX (CHART + TABLE) -->
+    <section id="slo-matrix" class="diagnostics-section">
+      
+      <!-- Interactive Real-Time Latency Chart -->
+      <div class="panel chart-panel">
+        <div class="panel-header">
+          <div class="panel-title">Telemetry &amp; SLO Diagnostics Matrix</div>
+          <div style="display:flex; gap:6px;">
+            <button class="btn btn-control active" onclick="setChartMetric('http', this)">HTTP INGRESS</button>
+            <button class="btn btn-control" onclick="setChartMetric('tcp', this)">TCP RTT</button>
+            <button class="btn btn-control" onclick="injectSpikeDemo()">INJECT SPIKE</button>
+          </div>
+        </div>
+
+        <div class="chart-stats-bar">
+          <div class="stat-pill">
+            <div class="dot" style="background:#38bdf8;"></div>
+            <span style="color:var(--text-muted);">p50:</span>
+            <span class="val" id="valP50">1.8ms</span>
+          </div>
+          <div class="stat-pill">
+            <div class="dot" style="background:#818cf8;"></div>
+            <span style="color:var(--text-muted);">p90:</span>
+            <span class="val" id="valP90">5.4ms</span>
+          </div>
+          <div class="stat-pill">
+            <div class="dot" style="background:#f59e0b;"></div>
+            <span style="color:var(--text-muted);">p99:</span>
+            <span class="val" id="valP99">11.7ms</span>
+          </div>
+          <div class="stat-pill">
+            <div class="dot" style="background:#ef4444;"></div>
+            <span style="color:var(--text-muted);">p99.9:</span>
+            <span class="val" id="valP999">14.2ms</span>
+          </div>
+          <div class="badge-mono" style="margin-left: auto;">
+            WINDOW: 60s REAL-TIME
+          </div>
+        </div>
+
+        <div class="chart-wrapper">
+          <canvas id="latencyChart"></canvas>
+          <div id="chartTooltip" class="chart-tooltip"></div>
+        </div>
+      </div>
+
+      <!-- Multi-Window SLO Matrix Table -->
+      <div class="panel slo-table-panel">
+        <div class="panel-header">
+          <div class="panel-title">Multi-Window SLO Matrix</div>
+          <div class="badge-mono">TARGET: 99.995%</div>
+        </div>
+
+        <div class="table-container">
+          <table class="technical-table">
+            <thead>
+              <tr>
+                <th>Window</th>
+                <th style="text-align:right;">Burn Rate</th>
+                <th style="text-align:right;">Budget Used</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr onclick="inspectSloRow('1 Hour', '1.24x', '0.17%', 'OK')">
+                <td><strong>1 Hour</strong></td>
+                <td style="text-align:right;">
+                  1.24x
+                  <span class="burn-bar-container"><span class="burn-bar-fill" style="width: 25%;"></span></span>
+                </td>
+                <td style="text-align:right; color:#fff;">0.17%</td>
+                <td><span class="status-badge ok"><span class="indicator-dot green"></span> OK</span></td>
+                <td><button class="btn btn-control" style="padding:2px 6px;">TRACE</button></td>
+              </tr>
+              <tr onclick="inspectSloRow('6 Hours', '0.82x', '0.68%', 'OK')">
+                <td><strong>6 Hours</strong></td>
+                <td style="text-align:right;">
+                  0.82x
+                  <span class="burn-bar-container"><span class="burn-bar-fill" style="width: 16%;"></span></span>
+                </td>
+                <td style="text-align:right; color:#fff;">0.68%</td>
+                <td><span class="status-badge ok"><span class="indicator-dot green"></span> OK</span></td>
+                <td><button class="btn btn-control" style="padding:2px 6px;">TRACE</button></td>
+              </tr>
+              <tr onclick="inspectSloRow('24 Hours', '1.05x', '3.20%', 'OK')">
+                <td><strong>24 Hours</strong></td>
+                <td style="text-align:right;">
+                  1.05x
+                  <span class="burn-bar-container"><span class="burn-bar-fill" style="width: 21%;"></span></span>
+                </td>
+                <td style="text-align:right; color:#fff;">3.20%</td>
+                <td><span class="status-badge ok"><span class="indicator-dot green"></span> OK</span></td>
+                <td><button class="btn btn-control" style="padding:2px 6px;">TRACE</button></td>
+              </tr>
+              <tr class="alert-row" onclick="inspectSloRow('3 Days', '2.41x', '8.44%', 'INVESTIGATE')">
+                <td><strong>3 Days</strong></td>
+                <td style="text-align:right; color:var(--status-amber);">
+                  2.41x
+                  <span class="burn-bar-container"><span class="burn-bar-fill amber" style="width: 58%;"></span></span>
+                </td>
+                <td style="text-align:right; color:var(--status-amber); font-weight:700;">8.44%</td>
+                <td><span class="status-badge investigate"><span class="indicator-dot amber pulse"></span> INVESTIGATE</span></td>
+                <td><button class="btn btn-control" style="padding:2px 6px; border-color:var(--status-amber-dim); color:var(--status-amber);">ANALYZE</button></td>
+              </tr>
+              <tr onclick="inspectSloRow('30 Days', '0.94x', '14.20%', 'OK')">
+                <td><strong>30 Days</strong></td>
+                <td style="text-align:right;">
+                  0.94x
+                  <span class="burn-bar-container"><span class="burn-bar-fill" style="width: 18%;"></span></span>
+                </td>
+                <td style="text-align:right; color:#fff;">14.20%</td>
+                <td><span class="status-badge ok"><span class="indicator-dot green"></span> OK</span></td>
+                <td><button class="btn btn-control" style="padding:2px 6px;">TRACE</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACTIVE KERNEL PROBES -->
+    <section id="probes" class="probes-section">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Active eBPF Kernel Probes &amp; Tracepoints</div>
+          <button id="reverifyBtn" class="btn btn-control" onclick="reverifyAllProbes()">
+            <span>⚡</span> RE-VERIFY ALL PROBES
+          </button>
+        </div>
+
+        <div class="probes-grid" id="probesGrid">
+          <!-- Probe 1 -->
+          <div class="probe-card verified" id="probe-1">
+            <div class="probe-card-header">
+              <span class="probe-name">socket_ops/tcp_est</span>
+              <span class="probe-overhead">11ns</span>
+            </div>
+            <div class="probe-desc">
+              Tracks TCP state transitions (SYN_SENT → ESTABLISHED) and initializes connection socket maps.
+            </div>
+            <div class="probe-meta-row">
+              <span>Invocations: <strong id="invoc-1">428,190/min</strong></span>
+              <span>Drops: <strong>0</strong></span>
+              <span class="status-badge ok"><span class="indicator-dot green"></span> ATTACHED</span>
+            </div>
+          </div>
+
+          <!-- Probe 2 -->
+          <div class="probe-card verified" id="probe-2">
+            <div class="probe-card-header">
+              <span class="probe-name">kprobe/tcp_retransmit</span>
+              <span class="probe-overhead">14ns</span>
+            </div>
+            <div class="probe-desc">
+              Intercepts <code style="color:#38bdf8;">tcp_retransmit_skb</code> in kernel space to log micro-burst packet loss.
+            </div>
+            <div class="probe-meta-row">
+              <span>Invocations: <strong id="invoc-2">1,842/min</strong></span>
+              <span>Drops: <strong>0</strong></span>
+              <span class="status-badge ok"><span class="indicator-dot green"></span> ATTACHED</span>
+            </div>
+          </div>
+
+          <!-- Probe 3 -->
+          <div class="probe-card verified" id="probe-3">
+            <div class="probe-card-header">
+              <span class="probe-name">sched_cls/ingress</span>
+              <span class="probe-overhead">8ns</span>
+            </div>
+            <div class="probe-desc">
+              Traffic Control (TC) classifier executing deterministic packet filtering and hardware queue ingress timestamps.
+            </div>
+            <div class="probe-meta-row">
+              <span>Invocations: <strong id="invoc-3">1,290,410/min</strong></span>
+              <span>Drops: <strong>0</strong></span>
+              <span class="status-badge ok"><span class="indicator-dot green"></span> ATTACHED</span>
+            </div>
+          </div>
+
+          <!-- Probe 4 -->
+          <div class="probe-card verified" id="probe-4">
+            <div class="probe-card-header">
+              <span class="probe-name">tracepoint/sys_enter_writev</span>
+              <span class="probe-overhead">18ns</span>
+            </div>
+            <div class="probe-desc">
+              Captures vector write syscall buffer lengths and maps IO payloads to active distributed tracing spans.
+            </div>
+            <div class="probe-meta-row">
+              <span>Invocations: <strong id="invoc-4">812,050/min</strong></span>
+              <span>Drops: <strong>0</strong></span>
+              <span class="status-badge ok"><span class="indicator-dot green"></span> ATTACHED</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- INFRASTRUCTURE TOPOLOGY -->
+    <section id="topology" class="topology-section">
+      <div class="panel topology-panel">
+        <div class="panel-header">
+          <div class="panel-title">Infrastructure Topology &amp; Service Mesh Telemetry</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="badge-mono">GLOBAL MESH: CILIUM eBPF</span>
+            <button class="btn btn-control" onclick="resetTopologyView()">RESET VIEW</button>
+          </div>
+        </div>
+
+        <div class="topology-canvas-wrapper">
+          <canvas id="topologyCanvas"></canvas>
+
+          <div class="topology-hud">
+            <div>MESH PROTOCOL: <span class="topology-hud-val">eBPF Direct-Routing (v4/v6)</span></div>
+            <div>AGGREGATE RPS: <span class="topology-hud-val" id="topoRpsVal">184,920 req/s</span></div>
+            <div>AVG KERNEL JITTER: <span class="topology-hud-val" id="topoJitterVal">0.14ms</span></div>
+          </div>
+
+          <div class="topology-legend">
+            <span><span class="indicator-dot blue"></span> Edge Gateway</span>
+            <span><span class="indicator-dot green"></span> Service Node</span>
+            <span><span class="indicator-dot amber"></span> Anomaly Node</span>
+          </div>
+        </div>
+
+        <!-- Node detail cards -->
+        <div class="topology-node-grid">
+          <div class="topo-card active" onclick="selectTopoNode('US East')">
+            <div class="topo-card-title">
+              <span>US East (iad-edge-01)</span>
+              <span class="indicator-dot green"></span>
+            </div>
+            <div class="topo-card-stats">
+              <span>RPS: <b>62.4k</b></span>
+              <span>p99: <b>8.2ms</b></span>
+              <span>Err: <b>0.001%</b></span>
+              <span>Health: <b style="color:var(--status-green)">100%</b></span>
+            </div>
+          </div>
+
+          <div class="topo-card" onclick="selectTopoNode('US West')">
+            <div class="topo-card-title">
+              <span>US West (pdx-edge-02)</span>
+              <span class="indicator-dot green"></span>
+            </div>
+            <div class="topo-card-stats">
+              <span>RPS: <b>48.1k</b></span>
+              <span>p99: <b>9.1ms</b></span>
+              <span>Err: <b>0.002%</b></span>
+              <span>Health: <b style="color:var(--status-green)">100%</b></span>
+            </div>
+          </div>
+
+          <div class="topo-card" onclick="selectTopoNode('EU Central')">
+            <div class="topo-card-title">
+              <span>EU Central (fra-edge-01)</span>
+              <span class="indicator-dot amber"></span>
+            </div>
+            <div class="topo-card-stats">
+              <span>RPS: <b>51.8k</b></span>
+              <span>p99: <b>14.8ms</b></span>
+              <span>Err: <b>0.014%</b></span>
+              <span>Health: <b style="color:var(--status-amber)">98.8%</b></span>
+            </div>
+          </div>
+
+          <div class="topo-card" onclick="selectTopoNode('Asia Pacific')">
+            <div class="topo-card-title">
+              <span>Asia Pacific (sin-edge-01)</span>
+              <span class="indicator-dot green"></span>
+            </div>
+            <div class="topo-card-stats">
+              <span>RPS: <b>22.6k</b></span>
+              <span>p99: <b>11.4ms</b></span>
+              <span>Err: <b>0.003%</b></span>
+              <span>Health: <b style="color:var(--status-green)">99.9%</b></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==========================================================================
+       MODALS & DIALOGS
+       ========================================================================== -->
+  <!-- Sandbox Modal -->
+  <div id="sandboxModal" class="modal-overlay" onclick="closeModalOnOverlay(event, 'sandboxModal')">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title"><span>⚡</span> K/TRACE KERNEL SANDBOX</div>
+        <button class="btn btn-control" onclick="closeModal('sandboxModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>Interactive ephemeral eBPF VM instance attached to simulated Linux kernel 6.8 with BPF ring buffers enabled.</p>
+        
+        <div class="modal-code-block">
+SEC("kprobe/tcp_v4_connect")
+int BPF_KPROBE(trace_connect, struct sock *sk) {
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    struct event_t event = {
+        .timestamp_ns = bpf_ktime_get_ns(),
+        .pid = pid_tgid >> 32,
+        .saddr = BPF_CORE_READ(sk, __sk_common.skc_rcv_saddr),
+        .daddr = BPF_CORE_READ(sk, __sk_common.skc_daddr)
+    };
+    bpf_ringbuf_output(&events, &event, sizeof(event), 0);
+    return 0;
+}
+        </div>
+        <p style="color:var(--text-muted); font-size:10px;">
+          Compiled using LLVM/Clang with CO-RE (Compile Once – Run Everywhere) target bpf.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('sandboxModal')">CLOSE</button>
+        <button class="btn btn-primary" onclick="injectSandboxProbe()">VERIFY &amp; EXECUTE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Attach Daemon Modal -->
+  <div id="daemonModal" class="modal-overlay" onclick="closeModalOnOverlay(event, 'daemonModal')">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title"><span>⎈</span> ATTACH EBPF DAEMONSET</div>
+        <button class="btn btn-control" onclick="closeModal('daemonModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>Run the following command on your target Linux hosts or Kubernetes cluster nodes with root/CAP_BPF privileges:</p>
+        <div class="modal-code-block" id="daemonInstallCmd">
+curl -sSL https://ktrace.internal/v4/agent-install.sh | sudo bash -s -- \
+  --cluster=prod-us-east \
+  --token=kt_live_9f821a88b14e \
+  --ringbuf-size=64MB \
+  --jit-optim=aggressive
+        </div>
+        <p style="font-size:10px; color:var(--text-muted);">
+          Compatible with Linux Kernels &ge; 5.4, BTF enabled. Overhead measured at &lt;0.08% CPU on 64-core EPYC.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('daemonModal')">CANCEL</button>
+        <button class="btn btn-primary" onclick="copyDaemonCommand()">COPY TO CLIPBOARD</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification System -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- ==========================================================================
+       BOTTOM TECHNICAL STATUS BAR (SRE HUD FOOTER)
+       ========================================================================== -->
+  <footer class="status-footer">
+    <div class="status-footer-left">
+      <div class="status-item">
+        <span class="indicator-dot green"></span>
+        <span>KERNEL: <b>Linux 6.8.0-45-generic</b></span>
+      </div>
+      <div class="status-item">
+        <span>ARCH: <b>x86_64 [AVX-512]</b></span>
+      </div>
+      <div class="status-item">
+        <span>BPF JIT LIMIT: <b>512 MB</b></span>
+      </div>
+      <div class="status-item">
+        <span>PROBES LOADED: <b id="footerProbesCount">4/4 Active</b></span>
+      </div>
+    </div>
+
+    <div class="status-footer-right">
+      <div class="status-item">
+        <span>TIME: <b id="utcClock">00:00:00.000 UTC</b></span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ==========================================================================
+       JAVASCRIPT ENGINE (REAL-TIME TELEMETRY, AUDIO SYNTH, CANVASES, ANIMATIONS)
+       ========================================================================== -->
+  <script>
+    /* --------------------------------------------------------------------------
+       1. GLOBAL STATE & WEB AUDIO ENGINE
+       -------------------------------------------------------------------------- */
+    let audioEngineActive = false;
+    let audioCtx = null;
+    let isStreamPaused = false;
+    let activeLogFilter = 'all';
+
+    // Play subtle synthetic radar click/beep when telemetry events occur (if audio enabled)
+    function playTelemetryBleep(freq = 880, duration = 0.03, type = 'sine') {
+      if (!audioEngineActive) return;
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.015, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    function toggleAudioEngine() {
+      audioEngineActive = !audioEngineActive;
+      const btn = document.getElementById('audioToggleBtn');
+      const icon = document.getElementById('audioIcon');
+      const label = document.getElementById('audioLabel');
+
+      if (audioEngineActive) {
+        btn.classList.add('active');
+        icon.textContent = '🔊';
+        label.textContent = 'AUDIO: ON';
+        showToast('Audio telemetry synthesizer enabled (Subtle kernel bleeps)');
+        playTelemetryBleep(1200, 0.08, 'sine');
+      } else {
+        btn.classList.remove('active');
+        icon.textContent = '🔇';
+        label.textContent = 'AUDIO: OFF';
+        showToast('Audio synthesizer disabled');
+      }
+    }
+
+    function triggerPcapDump() {
+      playTelemetryBleep(520, 0.06, 'triangle');
+      showToast('Initiating raw eBPF socket ringbuffer PCAP dump...');
+      setTimeout(() => {
+        showToast('PCAP capture complete: ktrace_ringbuf_snapshot_0x4f12.pcap [2.8 MB]');
+      }, 1200);
+    }
+
+    function showToast(msg) {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.textContent = `[SRE-SYS] ${msg}`;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    /* --------------------------------------------------------------------------
+       2. REAL-TIME UTC SRE CLOCK
+       -------------------------------------------------------------------------- */
+    function updateUtcClock() {
+      const now = new Date();
+      const h = String(now.getUTCHours()).padStart(2, '0');
+      const m = String(now.getUTCMinutes()).padStart(2, '0');
+      const s = String(now.getUTCSeconds()).padStart(2, '0');
+      const ms = String(now.getUTCMilliseconds()).padStart(3, '0');
+      document.getElementById('utcClock').textContent = `${h}:${m}:${s}.${ms} UTC`;
+    }
+    setInterval(updateUtcClock, 45);
+
+    /* --------------------------------------------------------------------------
+       3. SPARKLINE MICRO-CANVASES (HERO SECTION)
+       -------------------------------------------------------------------------- */
+    const sparklineData = {
+      sla: Array.from({length: 20}, () => 99.99 + Math.random() * 0.008),
+      egress: Array.from({length: 20}, () => 11.2 + Math.random() * 0.9),
+      probes: Array.from({length: 20}, () => 8400 + Math.floor(Math.random() * 30))
+    };
+
+    function drawSparkline(canvasId, data, color) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.clearRect(0, 0, w, h);
+      const min = Math.min(...data);
+      const max = Math.max(...data) || min + 1;
+      const step = w / (data.length - 1);
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+
+      data.forEach((val, i) => {
+        const x = i * step;
+        const norm = (val - min) / (max - min || 1);
+        const y = h - 4 - norm * (h - 8);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // Highlight head dot
+      const lastX = w;
+      const lastNorm = (data[data.length - 1] - min) / (max - min || 1);
+      const lastY = h - 4 - lastNorm * (h - 8);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(lastX - 2, lastY - 2, 4, 4);
+    }
+
+    function tickHeroMetrics() {
+      // SLA
+      const newSla = (99.992 + Math.random() * 0.006).toFixed(3);
+      sparklineData.sla.shift();
+      sparklineData.sla.push(parseFloat(newSla));
+      drawSparkline('sparklineSla', sparklineData.sla, '#10b981');
+      document.getElementById('liveSlaValue').textContent = `${newSla}%`;
+
+      // Egress
+      const newEgress = (11.5 + (Math.random() - 0.45) * 0.8).toFixed(2);
+      sparklineData.egress.shift();
+      sparklineData.egress.push(parseFloat(newEgress));
+      drawSparkline('sparklineEgress', sparklineData.egress, '#00d2ff');
+      document.getElementById('liveP99Egress').textContent = `${newEgress}ms`;
+
+      // Probes
+      const newProbes = 8400 + Math.floor(Math.random() * 35);
+      sparklineData.probes.shift();
+      sparklineData.probes.push(newProbes);
+      drawSparkline('sparklineProbes', sparklineData.probes, '#94a3b8');
+      document.getElementById('liveSocketProbes').textContent = newProbes.toLocaleString();
+    }
+    setInterval(tickHeroMetrics, 1200);
+
+    /* --------------------------------------------------------------------------
+       4. LIVE STREAMING TELEMETRY LOGS (TERMINAL)
+       -------------------------------------------------------------------------- */
+    const logTemplates = [
+      { type: 'sys', tag: 'SYS', service: 'tcp_v4_connect', msg: `Loaded BPF program 'kprobe_tcp_v4_connect' (insns: 412, jit_subprogs: 3)` },
+      { type: 'net', tag: 'NET', service: 'auth-edge', msg: `Socket map initialized for service: auth-edge-prd [map_fd: 12, bucket_slots: 1024]` },
+      { type: 'tra', tag: 'TRA', service: 'auth-edge', msg: `Span ID: 0x8f2a1b | status: 200 | duration: 4.81ms | cgroup: /k8s/auth` },
+      { type: 'wrn', tag: 'WRN', service: 'tcp_retransmit', msg: `TCP SYN retransmission detected [src: 10.244.1.84:443 -> dst: 10.244.3.12:51290 | rto: 204ms]` },
+      { type: 'tra', tag: 'TRA', service: 'auth-edge', msg: `TCP connection pooled | cwnd: 64 | ssthresh: 128 | rtt: 1.12ms | pmtu: 1500` },
+      { type: 'wrn', tag: 'WRN', service: 'burn_multipliers', msg: `Tail latency jitter > 18ms detected in ingress queue /dev/net/eth0 (rx_packets: 4.2k/s)` },
+      { type: 'sys', tag: 'SYS', service: 'sched_cls', msg: `Ringbuf commit event: batch_size=64 events, watermark=12%` },
+      { type: 'err', tag: 'ERR', service: 'tcp_retransmit', msg: `Egress packet drop detected in sched_cls: tc_ingress_filter (EPERM 0x1)` },
+      { type: 'tra', tag: 'TRA', service: 'auth-edge', msg: `eBPF sockops established: 10.0.4.12:8080 -> 10.0.9.88:5432 [rtt_us: 420]` },
+      { type: 'sys', tag: 'SYS', service: 'burn_multipliers', msg: `SLO error-budget delta computed: 3-Day burn factor normalized to 2.41x` }
+    ];
+
+    const terminalBody = document.getElementById('terminalLogBody');
+    const MAX_TERMINAL_LINES = 80;
+
+    function getFormattedTime() {
+      const d = new Date();
+      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}.${String(d.getMilliseconds()).padStart(3,'0')}`;
+    }
+
+    function appendLogLine(template) {
+      if (isStreamPaused) return;
+
+      // Filter check
+      if (activeLogFilter !== 'all') {
+        if (activeLogFilter === 'auth-edge' && template.service !== 'auth-edge') return;
+        if (activeLogFilter === 'tcp_retransmit' && template.service !== 'tcp_retransmit') return;
+        if (activeLogFilter === 'burn_multipliers' && template.service !== 'burn_multipliers') return;
+      }
+
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      line.dataset.service = template.service;
+      
+      const timeSpan = `<span class="log-time">[${getFormattedTime()}]</span>`;
+      const tagSpan = `<span class="log-tag ${template.type}">[${template.tag}]</span>`;
+      
+      let formattedMsg = template.msg
+        .replace(/status: 200/g, '<span class="highlight">status: 200</span>')
+        .replace(/duration: 4.81ms/g, '<span class="metric-hi">duration: 4.81ms</span>')
+        .replace(/cwnd: 64/g, '<span class="highlight">cwnd: 64</span>')
+        .replace(/jitter > 18ms/g, '<span class="warn-hi">jitter > 18ms</span>');
+
+      line.innerHTML = `${timeSpan} ${tagSpan} <span class="log-content">${formattedMsg}</span>`;
+
+      terminalBody.appendChild(line);
+
+      // Keep maximum lines to preserve memory and performance
+      while (terminalBody.children.length > MAX_TERMINAL_LINES) {
+        terminalBody.removeChild(terminalBody.firstChild);
+      }
+
+      // Auto scroll to bottom
+      terminalBody.scrollTop = terminalBody.scrollHeight;
+
+      // Bleep on critical or warning
+      if (template.type === 'wrn') {
+        playTelemetryBleep(440, 0.04, 'sawtooth');
+      } else if (template.type === 'err') {
+        playTelemetryBleep(280, 0.08, 'sawtooth');
+      } else {
+        if (Math.random() < 0.15) playTelemetryBleep(980, 0.02, 'sine');
+      }
+    }
+
+    // Populate initial logs
+    for (let i = 0; i < 8; i++) {
+      appendLogLine(logTemplates[i % logTemplates.length]);
+    }
+
+    // Continuous streaming interval
+    setInterval(() => {
+      const randIndex = Math.floor(Math.random() * logTemplates.length);
+      appendLogLine(logTemplates[randIndex]);
+    }, 950);
+
+    function toggleStreamPause() {
+      isStreamPaused = !isStreamPaused;
+      const btn = document.getElementById('streamPauseBtn');
+      if (isStreamPaused) {
+        btn.textContent = 'RESUME';
+        btn.classList.add('active');
+        showToast('Telemetry stream paused');
+      } else {
+        btn.textContent = 'PAUSE';
+        btn.classList.remove('active');
+        showToast('Telemetry stream resumed');
+      }
+    }
+
+    function clearLogStream() {
+      terminalBody.innerHTML = '';
+      showToast('Terminal log buffer cleared');
+    }
+
+    function filterLogs(filterType, elem) {
+      activeLogFilter = filterType;
+      document.querySelectorAll('.terminal-chip').forEach(c => c.classList.remove('active'));
+      elem.classList.add('active');
+      showToast(`Stream filtered by: ${filterType}`);
+    }
+
+    /* --------------------------------------------------------------------------
+       5. TELEMETRY & SLO LATENCY MATRIX (CANVAS 2D GRAPH)
+       -------------------------------------------------------------------------- */
+    const chartCanvas = document.getElementById('latencyChart');
+    const chartCtx = chartCanvas.getContext('2d');
+    const chartTooltip = document.getElementById('chartTooltip');
+
+    const chartPoints = 60;
+    const series = {
+      p50: Array.from({length: chartPoints}, () => 1.8 + (Math.random() - 0.5) * 0.4),
+      p90: Array.from({length: chartPoints}, () => 5.4 + (Math.random() - 0.5) * 0.8),
+      p99: Array.from({length: chartPoints}, () => 11.7 + (Math.random() - 0.5) * 1.2),
+      p999: Array.from({length: chartPoints}, () => 14.2 + (Math.random() - 0.5) * 1.6)
+    };
+
+    let chartMetricMode = 'http';
+    let mouseHoverX = null;
+
+    function resizeChartCanvas() {
+      if (!chartCanvas) return;
+      const rect = chartCanvas.parentElement.getBoundingClientRect();
+      chartCanvas.width = rect.width;
+      chartCanvas.height = rect.height;
+    }
+    window.addEventListener('resize', resizeChartCanvas);
+    resizeChartCanvas();
+
+    function renderLatencyChart() {
+      if (!chartCanvas) return;
+      const w = chartCanvas.width;
+      const h = chartCanvas.height;
+      if (w === 0 || h === 0) return;
+
+      chartCtx.clearRect(0, 0, w, h);
+
+      const paddingLeft = 45;
+      const paddingBottom = 26;
+      const paddingTop = 14;
+      const paddingRight = 14;
+
+      const graphW = w - paddingLeft - paddingRight;
+      const graphH = h - paddingTop - paddingBottom;
+
+      // Find max latency for scaling
+      const allVals = [...series.p50, ...series.p90, ...series.p99, ...series.p999];
+      const maxVal = Math.max(20, Math.ceil(Math.max(...allVals) * 1.15));
+
+      // Draw Grid Lines & Y-Axis Labels
+      chartCtx.font = '10px "JetBrains Mono", monospace';
+      chartCtx.fillStyle = '#475569';
+      chartCtx.strokeStyle = '#181d26';
+      chartCtx.lineWidth = 1;
+
+      const yTicks = 4;
+      for (let i = 0; i <= yTicks; i++) {
+        const y = paddingTop + (graphH / yTicks) * i;
+        const labelVal = (maxVal - (maxVal / yTicks) * i).toFixed(0);
+
+        chartCtx.beginPath();
+        chartCtx.moveTo(paddingLeft, y);
+        chartCtx.lineTo(w - paddingRight, y);
+        chartCtx.stroke();
+
+        chartCtx.fillText(`${labelVal}ms`, 6, y + 3);
+      }
+
+      // X-Axis Timestamps (relative seconds)
+      const xTicks = 6;
+      for (let i = 0; i <= xTicks; i++) {
+        const x = paddingLeft + (graphW / xTicks) * i;
+        const secAgo = Math.round(60 - (60 / xTicks) * i);
+        
+        chartCtx.beginPath();
+        chartCtx.moveTo(x, paddingTop);
+        chartCtx.lineTo(x, h - paddingBottom);
+        chartCtx.stroke();
+
+        chartCtx.fillText(`-${secAgo}s`, x - 10, h - 8);
+      }
+
+      // Draw series lines
+      const drawLine = (data, color, lineWidth = 1.8) => {
+        const step = graphW / (data.length - 1);
+        chartCtx.strokeStyle = color;
+        chartCtx.lineWidth = lineWidth;
+        chartCtx.beginPath();
+
+        data.forEach((val, i) => {
+          const x = paddingLeft + i * step;
+          const y = paddingTop + graphH - (val / maxVal) * graphH;
+          if (i === 0) chartCtx.moveTo(x, y);
+          else chartCtx.lineTo(x, y);
+        });
+        chartCtx.stroke();
+      };
+
+      drawLine(series.p50, '#38bdf8', 1.5);
+      drawLine(series.p90, '#818cf8', 1.6);
+      drawLine(series.p99, '#f59e0b', 2.0);
+      drawLine(series.p999, '#ef4444', 2.0);
+
+      // Draw vertical crosshair on mouse hover
+      if (mouseHoverX !== null && mouseHoverX >= paddingLeft && mouseHoverX <= w - paddingRight) {
+        chartCtx.strokeStyle = '#364259';
+        chartCtx.setLineDash([4, 4]);
+        chartCtx.beginPath();
+        chartCtx.moveTo(mouseHoverX, paddingTop);
+        chartCtx.lineTo(mouseHoverX, h - paddingBottom);
+        chartCtx.stroke();
+        chartCtx.setLineDash([]);
+
+        // Get index under cursor
+        const relX = mouseHoverX - paddingLeft;
+        const index = Math.min(chartPoints - 1, Math.max(0, Math.round((relX / graphW) * (chartPoints - 1))));
+
+        chartTooltip.style.display = 'block';
+        chartTooltip.style.left = `${mouseHoverX + 12}px`;
+        chartTooltip.style.top = `${paddingTop + 10}px`;
+        chartTooltip.innerHTML = `
+          <div style="color:var(--text-muted); margin-bottom:2px;">T-${60 - index}s</div>
+          <div style="color:#ef4444;">p99.9: <b>${series.p999[index].toFixed(2)}ms</b></div>
+          <div style="color:#f59e0b;">p99.0: <b>${series.p99[index].toFixed(2)}ms</b></div>
+          <div style="color:#818cf8;">p90.0: <b>${series.p90[index].toFixed(2)}ms</b></div>
+          <div style="color:#38bdf8;">p50.0: <b>${series.p50[index].toFixed(2)}ms</b></div>
+        `;
+      } else {
+        chartTooltip.style.display = 'none';
+      }
+    }
+
+    function tickChartData() {
+      const base = chartMetricMode === 'http' ? 1.0 : 0.4;
+      const noise = () => (Math.random() - 0.5);
+
+      const nextP50 = Math.max(0.5, (1.8 * base + noise() * 0.3));
+      const nextP90 = Math.max(nextP50 + 1.2, (5.4 * base + noise() * 0.6));
+      const nextP99 = Math.max(nextP90 + 2.0, (11.7 * base + noise() * 0.9));
+      const nextP999 = Math.max(nextP99 + 1.5, (14.2 * base + noise() * 1.2));
+
+      series.p50.shift(); series.p50.push(nextP50);
+      series.p90.shift(); series.p90.push(nextP90);
+      series.p99.shift(); series.p99.push(nextP99);
+      series.p999.shift(); series.p999.push(nextP999);
+
+      document.getElementById('valP50').textContent = `${nextP50.toFixed(1)}ms`;
+      document.getElementById('valP90').textContent = `${nextP90.toFixed(1)}ms`;
+      document.getElementById('valP99').textContent = `${nextP99.toFixed(1)}ms`;
+      document.getElementById('valP999').textContent = `${nextP999.toFixed(1)}ms`;
+
+      renderLatencyChart();
+    }
+    setInterval(tickChartData, 1000);
+
+    chartCanvas.addEventListener('mousemove', (e) => {
+      const rect = chartCanvas.getBoundingClientRect();
+      mouseHoverX = e.clientX - rect.left;
+      renderLatencyChart();
+    });
+    chartCanvas.addEventListener('mouseleave', () => {
+      mouseHoverX = null;
+      renderLatencyChart();
+    });
+
+    function setChartMetric(mode, btn) {
+      chartMetricMode = mode;
+      btn.parentElement.querySelectorAll('.btn-control').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      showToast(`Diagnostics chart metric switched to: ${mode.toUpperCase()}`);
+    }
+
+    function injectSpikeDemo() {
+      // Injects a deliberate TCP anomaly latency spike into the chart
+      for (let i = chartPoints - 5; i < chartPoints; i++) {
+        series.p99[i] = 28.4 + Math.random() * 4;
+        series.p999[i] = 36.8 + Math.random() * 6;
+      }
+      playTelemetryBleep(240, 0.15, 'sawtooth');
+      showToast('INJECTED ANOMALY: Simulated 36ms TCP SYN Retransmit burst across auth-edge pods');
+      renderLatencyChart();
+    }
+
+    function inspectSloRow(windowName, burn, budget, status) {
+      playTelemetryBleep(880, 0.04, 'sine');
+      showToast(`Inspecting SLO Window: ${windowName} | Burn: ${burn} | Budget: ${budget} | Status: ${status}`);
+    }
+
+    /* --------------------------------------------------------------------------
+       6. ACTIVE KERNEL PROBES RE-VERIFIER
+       -------------------------------------------------------------------------- */
+    function reverifyAllProbes() {
+      const btn = document.getElementById('reverifyBtn');
+      btn.innerHTML = '<span>⏳</span> VERIFYING BYTECODE...';
+      btn.classList.add('active');
+      playTelemetryBleep(1400, 0.08, 'sine');
+
+      const cards = document.querySelectorAll('.probe-card');
+      cards.forEach((card, idx) => {
+        card.style.borderColor = 'var(--accent-blue)';
+        setTimeout(() => {
+          card.classList.add('verified');
+          card.style.borderColor = 'var(--status-green)';
+          playTelemetryBleep(800 + idx * 200, 0.03, 'sine');
+        }, (idx + 1) * 250);
+      });
+
+      setTimeout(() => {
+        btn.innerHTML = '<span>⚡</span> RE-VERIFY ALL PROBES';
+        btn.classList.remove('active');
+        showToast('eBPF In-Kernel Verifier: ALL 4 HOOKS PASSED (0 safety violations, 0 unbounded loops)');
+      }, 1400);
+    }
+
+    // Dynamic invocation counters ticking
+    setInterval(() => {
+      const inv1 = 428000 + Math.floor(Math.random() * 400);
+      const inv2 = 1840 + Math.floor(Math.random() * 30);
+      const inv3 = 1290000 + Math.floor(Math.random() * 900);
+      const inv4 = 812000 + Math.floor(Math.random() * 500);
+
+      document.getElementById('invoc-1').textContent = `${inv1.toLocaleString()}/min`;
+      document.getElementById('invoc-2').textContent = `${inv2.toLocaleString()}/min`;
+      document.getElementById('invoc-3').textContent = `${inv3.toLocaleString()}/min`;
+      document.getElementById('invoc-4').textContent = `${inv4.toLocaleString()}/min`;
+    }, 1500);
+
+    /* --------------------------------------------------------------------------
+       7. INFRASTRUCTURE TOPOLOGY (CANVAS 2D PACKET ROUTING ANIMATION)
+       -------------------------------------------------------------------------- */
+    const topoCanvas = document.getElementById('topologyCanvas');
+    const topoCtx = topoCanvas.getContext('2d');
+
+    function resizeTopology() {
+      if (!topoCanvas) return;
+      const rect = topoCanvas.parentElement.getBoundingClientRect();
+      topoCanvas.width = rect.width;
+      topoCanvas.height = rect.height;
+    }
+    window.addEventListener('resize', resizeTopology);
+    resizeTopology();
+
+    // Topology Nodes definition
+    const topoNodes = [
+      { id: 'iad', label: 'US East (iad)', xRatio: 0.15, yRatio: 0.3, type: 'edge', color: '#00d2ff', rps: '62.4k', p99: '8.2ms' },
+      { id: 'pdx', label: 'US West (pdx)', xRatio: 0.15, yRatio: 0.7, type: 'edge', color: '#00d2ff', rps: '48.1k', p99: '9.1ms' },
+      { id: 'fra', label: 'EU Central (fra)', xRatio: 0.85, yRatio: 0.3, type: 'edge', color: '#f59e0b', rps: '51.8k', p99: '14.8ms' },
+      { id: 'sin', label: 'Asia Pac (sin)', xRatio: 0.85, yRatio: 0.7, type: 'edge', color: '#00d2ff', rps: '22.6k', p99: '11.4ms' },
+      { id: 'core', label: 'CORE MESH (cilium-ebpf)', xRatio: 0.5, yRatio: 0.5, type: 'core', color: '#10b981', rps: '184.9k', p99: '2.1ms' },
+      { id: 'auth', label: 'auth-service', xRatio: 0.4, yRatio: 0.2, type: 'service', color: '#38bdf8', rps: '72k', p99: '3.4ms' },
+      { id: 'pay', label: 'payment-ledger', xRatio: 0.6, yRatio: 0.2, type: 'service', color: '#38bdf8', rps: '28k', p99: '4.8ms' },
+      { id: 'db', label: 'db-cluster (pgsql)', xRatio: 0.5, yRatio: 0.82, type: 'service', color: '#38bdf8', rps: '42k', p99: '1.2ms' }
+    ];
+
+    const topoLinks = [
+      { from: 'iad', to: 'core' },
+      { from: 'pdx', to: 'core' },
+      { from: 'fra', to: 'core' },
+      { from: 'sin', to: 'core' },
+      { from: 'core', to: 'auth' },
+      { from: 'core', to: 'pay' },
+      { from: 'core', to: 'db' },
+      { from: 'auth', to: 'db' }
+    ];
+
+    // Animated particles along edges
+    const particles = [];
+    for (let i = 0; i < 40; i++) {
+      const link = topoLinks[Math.floor(Math.random() * topoLinks.length)];
+      particles.push({
+        link: link,
+        progress: Math.random(),
+        speed: 0.003 + Math.random() * 0.005,
+        color: link.from === 'fra' ? '#f59e0b' : '#00d2ff'
+      });
+    }
+
+    let selectedNodeId = null;
+
+    function renderTopology() {
+      if (!topoCanvas) return;
+      const w = topoCanvas.width;
+      const h = topoCanvas.height;
+      if (w === 0 || h === 0) return;
+
+      topoCtx.clearRect(0, 0, w, h);
+
+      // Draw subtle background grid inside topology
+      topoCtx.strokeStyle = 'rgba(255,255,255,0.02)';
+      topoCtx.lineWidth = 1;
+      const gridSize = 24;
+      for (let x = 0; x < w; x += gridSize) {
+        topoCtx.beginPath();
+        topoCtx.moveTo(x, 0);
+        topoCtx.lineTo(x, h);
+        topoCtx.stroke();
+      }
+      for (let y = 0; y < h; y += gridSize) {
+        topoCtx.beginPath();
+        topoCtx.moveTo(0, y);
+        topoCtx.lineTo(w, y);
+        topoCtx.stroke();
+      }
+
+      // Draw Links
+      topoLinks.forEach(link => {
+        const source = topoNodes.find(n => n.id === link.from);
+        const target = topoNodes.find(n => n.id === link.to);
+
+        const x1 = source.xRatio * w;
+        const y1 = source.yRatio * h;
+        const x2 = target.xRatio * w;
+        const y2 = target.yRatio * h;
+
+        topoCtx.strokeStyle = '#1a2230';
+        topoCtx.lineWidth = 1.5;
+        topoCtx.beginPath();
+        topoCtx.moveTo(x1, y1);
+        topoCtx.lineTo(x2, y2);
+        topoCtx.stroke();
+      });
+
+      // Animate and Draw Particles
+      particles.forEach(p => {
+        p.progress += p.speed;
+        if (p.progress > 1) p.progress = 0;
+
+        const source = topoNodes.find(n => n.id === p.link.from);
+        const target = topoNodes.find(n => n.id === p.link.to);
+
+        const x1 = source.xRatio * w;
+        const y1 = source.yRatio * h;
+        const x2 = target.xRatio * w;
+        const y2 = target.yRatio * h;
+
+        const px = x1 + (x2 - x1) * p.progress;
+        const py = y1 + (y2 - y1) * p.progress;
+
+        topoCtx.fillStyle = p.color;
+        topoCtx.fillRect(px - 2, py - 2, 4, 4);
+      });
+
+      // Draw Nodes
+      topoNodes.forEach(node => {
+        const nx = node.xRatio * w;
+        const ny = node.yRatio * h;
+
+        const isSelected = selectedNodeId === node.id;
+
+        // Node Outer Box
+        const boxW = node.type === 'core' ? 140 : 110;
+        const boxH = node.type === 'core' ? 38 : 32;
+
+        topoCtx.fillStyle = isSelected ? '#1c2433' : '#0e1117';
+        topoCtx.strokeStyle = isSelected ? '#00d2ff' : (node.color || '#242c3b');
+        topoCtx.lineWidth = isSelected ? 2 : 1;
+
+        topoCtx.fillRect(nx - boxW/2, ny - boxH/2, boxW, boxH);
+        topoCtx.strokeRect(nx - boxW/2, ny - boxH/2, boxW, boxH);
+
+        // Status dot
+        topoCtx.fillStyle = node.color;
+        topoCtx.fillRect(nx - boxW/2 + 6, ny - 3, 6, 6);
+
+        // Text
+        topoCtx.font = '10px "JetBrains Mono", monospace';
+        topoCtx.fillStyle = '#fff';
+        topoCtx.textAlign = 'left';
+        topoCtx.fillText(node.label, nx - boxW/2 + 16, ny + 1);
+
+        // Mini metrics line
+        topoCtx.font = '9px "JetBrains Mono", monospace';
+        topoCtx.fillStyle = '#64748b';
+        topoCtx.fillText(`${node.rps} | ${node.p99}`, nx - boxW/2 + 16, ny + 11);
+      });
+
+      requestAnimationFrame(renderTopology);
+    }
+    requestAnimationFrame(renderTopology);
+
+    function selectTopoNode(regionName) {
+      const match = topoNodes.find(n => n.label.includes(regionName));
+      if (match) {
+        selectedNodeId = match.id;
+        playTelemetryBleep(740, 0.04, 'sine');
+        showToast(`Selected Topology Gateway: ${match.label} [Live RPS: ${match.rps}, p99: ${match.p99}]`);
+      }
+      document.querySelectorAll('.topo-card').forEach(card => {
+        if (card.textContent.includes(regionName)) {
+          card.classList.add('active');
+        } else {
+          card.classList.remove('active');
+        }
+      });
+    }
+
+    function resetTopologyView() {
+      selectedNodeId = null;
+      document.querySelectorAll('.topo-card').forEach(c => c.classList.remove('active'));
+      showToast('Topology camera viewport reset to global cluster overview');
+    }
+
+    /* --------------------------------------------------------------------------
+       8. MODAL CONTROLLERS & ACTIONS
+       -------------------------------------------------------------------------- */
+    function openModal(modalId) {
+      const m = document.getElementById(modalId);
+      if (m) m.classList.add('active');
+      playTelemetryBleep(600, 0.05, 'sine');
+    }
+
+    function closeModal(modalId) {
+      const m = document.getElementById(modalId);
+      if (m) m.classList.remove('active');
+    }
+
+    function closeModalOnOverlay(e, modalId) {
+      if (e.target.id === modalId) {
+        closeModal(modalId);
+      }
+    }
+
+    function injectSandboxProbe() {
+      closeModal('sandboxModal');
+      showToast('Compiling BPF bytecode via Clang 18 target=bpf... JIT map verified. Attached to hook.');
+      playTelemetryBleep(1100, 0.08, 'sine');
+    }
+
+    function copyDaemonCommand() {
+      const cmd = document.getElementById('daemonInstallCmd').innerText;
+      navigator.clipboard.writeText(cmd).then(() => {
+        closeModal('daemonModal');
+        showToast('Daemon installation script copied to clipboard!');
+        playTelemetryBleep(880, 0.04, 'sine');
+      }).catch(() => {
+        closeModal('daemonModal');
+        showToast('Command ready for manual execution in terminal');
+      });
+    }
+  </script>
+</body>
+</html>
