@@ -14,20 +14,20 @@ function check(n1,n2){
     if (n1 < n2) {
         for (let i = n1; i >= 0; i--) {
             if (n1 % i == 0 && n2 % i == 0) {
-                arr.push(i)
+                arr.push(i);
             } 
         }
     } else {
         for (let i = n2; i >= 0; i--) {
             if (n1 % i == 0 && n2 % i == 0) {
-                arr.push(i)
+                arr.push(i);
             } 
         }
     }
     // Find the maximum common factor in the array
     for (let i = 0; i < arr.length; i++) {
         if (max < arr[i]) {
-            max = arr[i]
+            max = arr[i];
         }
     }
 }
