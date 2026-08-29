@@ -122,8 +122,8 @@ function findPrime(searchPrimeNum){
 }
 
 // Log the result of finding primes up to searchPrimeNum
-console.log(findPrime(searchPrimeNum))
+console.log(findPrime(searchPrimeNum));
 
 // Log the final array containing the prime numbers
-console.log(primeArr)
+console.log(primeArr);
 
