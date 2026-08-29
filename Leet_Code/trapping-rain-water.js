@@ -1,15 +1,24 @@
+// Sample input heights representing elevation map
 let height = [4, 2, 0, 3, 2, 5];
 
+/**
+ * Calculates the total trapped rain water.
+ * This implementation uses the Two Pointer approach.
+ * @param {number[]} height - The elevation map.
+ * @returns {number} The total volume of trapped water.
+ */
 let water = (height) => {
-    let left = 0;
-    let right = height.length - 1;
+    let left = 0;                  // Left pointer starting at beginning
+    let right = height.length - 1; // Right pointer starting at end
 
-    let leftMax = 0;
-    let rightMax = 0;
-    let totalWater = 0;
+    let leftMax = 0;               // Maximum height seen from the left
+    let rightMax = 0;              // Maximum height seen from the right
+    let totalWater = 0;            // Accumulator for total trapped water
 
     while (left < right) {
+        // Process the side with the smaller height value
         if (height[left] < height[right]) {
+            // Update leftMax or calculate trapped water
             if (height[left] >= leftMax) {
                 leftMax = height[left];
             } else {
@@ -18,6 +27,7 @@ let water = (height) => {
 
             left++;
         } else {
+            // Update rightMax or calculate trapped water
             if (height[right] >= rightMax) {
                 rightMax = height[right];
             } else {
@@ -31,4 +41,6 @@ let water = (height) => {
     return totalWater;
 };
 
-console.log(water(height)); 
+// Log total trapped water
+console.log(water(height));
+ 
